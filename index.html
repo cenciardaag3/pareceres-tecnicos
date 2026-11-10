@@ -231,7 +231,7 @@ html.ro [data-act=nova],html.ro .ed-only,html.ro [data-act=bibNovo],html.ro [dat
    <label class="f">Nome de guerra<input id="audG" required></label>
    <label class="f">Sigla<input id="audS" maxlength="3" placeholder="automática"></label>
    <label class="f">Nome completo<input id="audN" required placeholder="NOME COMPLETO Posto Quadro"></label>
-   <div class="f"><span>&nbsp;</span><button class="btn pri" type="submit">Adicionar</button></div>
+   <div class="f"><span>&nbsp;</span><div class="row" style="gap:6px"><button class="btn pri" type="submit" id="audBt">Adicionar</button><button class="btn" type="button" id="audCanc" hidden>Cancelar</button></div></div>
   </form>
  </div>
  <div class="card">
@@ -324,7 +324,8 @@ const GRAV={A:'Alta',M:'Média',B:'Baixa'};
 /* ===== Dados ===== */
 const NOVOS=()=>({auditores:[],modelo:null,biblioteca:JSON.parse(JSON.stringify(BIB_SEED)),analises:[],hist:[],temasExt:{}});
 let DADOS=NOVOS();
-function normaliza(d){const n=Object.assign(NOVOS(),d||{});if(!Array.isArray(n.biblioteca)||!n.biblioteca.length)n.biblioteca=JSON.parse(JSON.stringify(BIB_SEED));return n}
+function ptPad(s){return String(s||'').replace(/^PT\s*(\d+)\s*\/\s*(?!DAAG3-)([A-Za-z]{2,4})\s*\/\s*(\d{4})$/,(m,n,g,a)=>`PT ${n}/DAAG3-${g.toUpperCase()}/${a}`)}
+function normaliza(d){const n=Object.assign(NOVOS(),d||{});if(Array.isArray(n.hist))n.hist.forEach(h=>h.pt=ptPad(h.pt));if(!Array.isArray(n.biblioteca)||!n.biblioteca.length)n.biblioteca=JSON.parse(JSON.stringify(BIB_SEED));return n}
 const MEM={arq:{}};
 let CUR=null,SUB='inicio';
 const an=()=>DADOS.analises.find(a=>a.id===CUR)||null;
@@ -346,7 +347,7 @@ async function baixar(blob,nome){if(window.claude&&typeof claude.use==='function
 /* ===== Render geral ===== */
 function render(){renderInicio();renderAnalise();renderBib();renderConfig();if(typeof pintaPerfil==='function')pintaPerfil()}
 function siglaDe(g){return norm(g).replace(/[^a-z]/g,'').slice(0,3).toUpperCase()}
-function ptNome(a){return a.numero?`PT ${a.numero}/${a.sigla||'???'}/${a.ano}`:'PT (sem número)'}
+function ptNome(a){return a.numero?`PT ${a.numero}/DAAG3-${a.sigla||'???'}/${a.ano}`:'PT (sem número)'}
 function temaNome(c){const b=DADOS.biblioteca.find(x=>x.tema===c);return b?b.nome:(DADOS.temasExt[c]&&DADOS.temasExt[c].nome)||c}
 
 function recorrencia(){
@@ -917,7 +918,7 @@ async function acao(act,el){
    try{const C=contexto(a);const blob=await gerarDocx(C,DADOS.modelo.b64);baixar(blob,`PT_${a.numero||'X'}_DAAG3-${a.sigla||'XXX'}_${a.ano}.docx`)}catch(e){toast('Não consegui gerar: '+(e.message||e))}
    break}
   case 'finalizar':{
-   const pt=`PT ${a.numero}/${a.sigla}/${a.ano}`;
+   const pt=`PT ${a.numero}/DAAG3-${a.sigla}/${a.ano}`;
    if(!a.numero||!a.sigla){toast('Informe o número do PT e o autor na etapa 1.');return}
    const g={};for(const x of a.achados){const r=g[x.tema]||(g[x.tema]={tema:x.tema,resumo:[],valor:0});if(x.resumo)r.resumo.push(x.resumo);r.valor+=nz(x.valor)}
    const reg={pt,data:a.dataPT,ug:a.ug,autor:a.sigla,edital:a.nEdital,modalidade:a.modalidade,objeto:a.objeto,valor:num(a.valor)||null,avaliar:contexto(a).recomendacoes.some(r=>/prosseguimento/.test(r)),origem:'app',achados:Object.values(g).map(r=>({tema:r.tema,resumo:r.resumo.join('; '),valor:r.valor||null}))};
@@ -926,6 +927,7 @@ async function acao(act,el){
   case 'bibEd':editaBib(el.dataset.t);break;
   case 'mdUp':$('mdFile').click();break;
   case 'hiUp':$('hiFile').click();break;
+  case 'audEd':{const x=DADOS.auditores.find(y=>y.sigla===el.dataset.s);if(!x)break;AUD_ED=x.sigla;$('audG').value=x.guerra;$('audS').value=x.sigla;$('audN').value=x.nome;$('audBt').textContent='Salvar';$('audCanc').hidden=false;$('audG').focus();$('fmAud').scrollIntoView({block:'center'});break}
   case 'audDel':{if(!await pergunta('Remover este auditor do cadastro?','Remover'))return;DADOS.auditores=DADOS.auditores.filter(x=>x.sigla!==el.dataset.s);Store.touch();renderConfig();break}
  }
 }
@@ -951,14 +953,21 @@ function editaBib(t){
 
 /* ===== Configurações ===== */
 function renderConfig(){
- $('tbAud').innerHTML=DADOS.auditores.map(x=>`<tr><td>${esc(x.guerra)}</td><td><b>${esc(x.sigla)}</b></td><td>${esc(x.nome)}</td><td class="n"><button class="btn sm red" data-act="audDel" data-s="${esc(x.sigla)}">Remover</button></td></tr>`).join('')||'<tr><td class="vazio" colspan="4">Nenhum auditor cadastrado.</td></tr>';
+ $('tbAud').innerHTML=DADOS.auditores.map(x=>`<tr><td>${esc(x.guerra)}</td><td><b>${esc(x.sigla)}</b></td><td>${esc(x.nome)}</td><td class="n" style="white-space:nowrap"><button class="btn sm" data-act="audEd" data-s="${esc(x.sigla)}">Editar</button> <button class="btn sm red" data-act="audDel" data-s="${esc(x.sigla)}">Remover</button></td></tr>`).join('')||'<tr><td class="vazio" colspan="4">Nenhum auditor cadastrado.</td></tr>';
  $('mdInfo').innerHTML=DADOS.modelo?`<span class="okc">✓</span> ${esc(DADOS.modelo.nome)} (${fmt(DADOS.modelo.tam/1024,0)} KB, enviado em ${dt(DADOS.modelo.em.slice(0,10))})`:'<span class="warn">Nenhum modelo enviado.</span>';
  const imp=DADOS.hist.filter(h=>h.origem==='importado').length;
  $('hiInfo').textContent=DADOS.hist.length?`${DADOS.hist.length} pareceres no histórico (${imp} importados, ${DADOS.hist.length-imp} finalizados neste app).`:'Nenhum histórico.';
 }
+let AUD_ED=null;
+function audLimpa(){AUD_ED=null;$('fmAud').reset();$('audS').placeholder='automática';$('audBt').textContent='Adicionar';$('audCanc').hidden=true}
+$('audCanc').onclick=audLimpa;
 $('fmAud').onsubmit=e=>{e.preventDefault();const g=$('audG').value.trim(),n=$('audN').value.trim();const s=($('audS').value.trim()||siglaDe(g)).toUpperCase();
- if(DADOS.auditores.some(x=>x.sigla===s)){toast('A sigla '+s+' já existe: informe outra.');$('audS').focus();return}
- DADOS.auditores.push({guerra:g,sigla:s,nome:n});$('fmAud').reset();Store.touch();renderConfig();renderAnalise()};
+ if(DADOS.auditores.some(x=>x.sigla===s&&x.sigla!==AUD_ED)){toast('A sigla '+s+' já existe: informe outra.');$('audS').focus();return}
+ if(AUD_ED){const x=DADOS.auditores.find(y=>y.sigla===AUD_ED);if(x){const ant=x.sigla;Object.assign(x,{guerra:g,sigla:s,nome:n});
+   if(ant!==s)for(const a of DADOS.analises){if(a.sit==='final')continue;if(Array.isArray(a.autores))a.autores=a.autores.map(v=>v===ant?s:v);if(a.sigla===ant)a.sigla=s}}
+  toast('Auditor atualizado.')}
+ else DADOS.auditores.push({guerra:g,sigla:s,nome:n});
+ audLimpa();Store.touch();renderConfig();renderAnalise()};
 $('audG').oninput=()=>{$('audS').placeholder=siglaDe($('audG').value)||'automática'};
 $('mdFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
  try{const buf=new Uint8Array(await f.arrayBuffer());const z=await JSZip.loadAsync(buf);const d=await z.file('word/document.xml').async('string');if(!/Parecer Técnico/.test(d)||!/Alnea/.test(d))throw new Error('O arquivo não parece ser o modelo do PT.');
@@ -967,7 +976,7 @@ $('mdFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f
 $('hiFile').onchange=async e=>{const fs=[...e.target.files];e.target.value='';let ach=null,par=null,tem=null;
  for(const f of fs){try{const j=JSON.parse(await f.text());if(Array.isArray(j)&&j[0]){if('tema'in j[0]&&'pt'in j[0])ach=j;else if('pt'in j[0])par=j;else if('tema'in j[0]&&'nome'in j[0])tem=j}}catch(err){}}
  if(!ach||!par){toast('Selecione juntos os arquivos achados.json e pareceres.json (temas.json é opcional).');return}
- const nov=par.map(p=>({pt:p.pt,data:p.data,ug:p.ug,autor:p.autor||'',edital:p.edital||'',modalidade:p.modalidade||'',objeto:p.objeto||'',valor:p.valor_estimado??null,avaliar:!!p.avaliar_prosseguimento,origem:'importado',achados:ach.filter(x=>x.pt===p.pt).map(x=>({tema:x.tema,resumo:x.resumo||'',valor:x.valor_rs??null}))}));
+ const nov=par.map(p=>({pt:ptPad(p.pt),data:p.data,ug:p.ug,autor:p.autor||'',edital:p.edital||'',modalidade:p.modalidade||'',objeto:p.objeto||'',valor:p.valor_estimado??null,avaliar:!!p.avaliar_prosseguimento,origem:'importado',achados:ach.filter(x=>x.pt===p.pt).map(x=>({tema:x.tema,resumo:x.resumo||'',valor:x.valor_rs??null}))}));
  const app=DADOS.hist.filter(h=>h.origem==='app'&&!nov.some(n=>n.pt===h.pt));
  DADOS.hist=nov.concat(app);
  for(const x of ach)if(!DADOS.biblioteca.some(b=>b.tema===x.tema))DADOS.temasExt[x.tema]={nome:x.tema_nome,eixo:x.eixo};
@@ -978,7 +987,7 @@ $('hiFile').onchange=async e=>{const fs=[...e.target.files];e.target.value='';le
 /* ===== Base compartilhada: junção de versões (dois editores ao mesmo tempo) =====
    Listas com chave (análises, auditores, biblioteca, histórico): item a item, comparando com a última versão lida (B).
    Só um lado mudou → fica a mudança; os dois mudaram o mesmo item → fica a versão deste aparelho; exclusão vale se o outro lado não mexeu. */
-function mesclar(L,R,B){L=L||{};R=R||{};B=B||{};const o={};const eq=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function mesclar(L,R,B){L=L||{};R=R||{};B=B||{};for(const X of [L,R,B])if(Array.isArray(X.hist))X.hist=X.hist.map(h=>({...h,pt:ptPad(h.pt)}));const o={};const eq=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
  const ID={analises:'id',auditores:'sigla',biblioteca:'tema',hist:'pt'};
  for(const k of new Set([...Object.keys(L),...Object.keys(R)])){const l=L[k],r=R[k],b=B[k];
   if(ID[k]&&(Array.isArray(l)||Array.isArray(r))){const id=ID[k],mp=a=>new Map((a||[]).map(x=>[x[id],x])),ml=mp(l),mr=mp(r),mb=mp(b);const out=[];
