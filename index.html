@@ -61,7 +61,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 #stBar button{border:1px solid var(--ln);background:var(--sf);border-radius:8px;padding:4px 10px;font-size:13px}
 #stMsg.st-err{color:var(--r);font-weight:600}
 /* login */
-html.cf-lock body>*:not(#login){display:none!important}
+html.cf-lock body>*:not(#login):not(.picker){display:none!important}
 #login{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:24px}
 html.cf-lock #login{display:flex}
 .lg-card{width:100%;max-width:440px;background:var(--sf);border:1px solid var(--ln);border-radius:16px;box-shadow:0 10px 40px rgba(11,30,70,.10);padding:36px 32px 28px;text-align:center}
