@@ -159,7 +159,7 @@ html.ro [data-act=nova],html.ro .ed-only,html.ro [data-act=bibNovo],html.ro [dat
 <main id="pgInicio" data-pg="inicio">
  <p class="kl" id="hello">Olá</p>
  <h1>Pareceres técnicos</h1>
- <p class="lead">Prévia da análise de editais de obras e serviços de engenharia (NPA 21-62 · DAAG3), sem uso de IA: leitura dos PDFs, cálculos do orçamento, roteiro de verificação e geração do PT no modelo.</p>
+ <p class="lead">Prévia da análise de editais de obras e serviços de engenharia (NPA 21-62 · DAAG3), sem uso de IA: leitura dos PDFs e planilhas, cálculos do orçamento, roteiro de verificação e geração do PT no modelo.</p>
  <div class="kpis">
   <article class="card ed-only"><p class="kl">Análises em andamento</p><p class="kv" id="kAnd">0</p></article>
   <article class="card"><p class="kl">Pareceres finalizados</p><p class="kv" id="kFin">0</p></article>
@@ -175,7 +175,7 @@ html.ro [data-act=nova],html.ro .ed-only,html.ro [data-act=bibNovo],html.ro [dat
  </div>
  <div class="card">
   <h2 style="margin:0 0 12px;font-size:18px">Pareceres emitidos</h2>
-  <div class="tbl"><table><thead><tr><th>PT</th><th>Data</th><th>UG</th><th>Edital</th><th>Objeto</th><th class="n">Achados</th><th class="n">R$ estimado</th><th>Temas</th></tr></thead><tbody id="tbPar"></tbody></table></div>
+  <div class="tbl"><table><thead><tr><th>PT</th><th>Data</th><th>UG</th><th>Edital</th><th>Objeto</th><th class="n">Achados</th><th class="n">R$ estimado</th><th>Temas</th><th></th></tr></thead><tbody id="tbPar"></tbody></table></div>
  </div>
 </main>
 
@@ -251,7 +251,7 @@ html.ro [data-act=nova],html.ro .ed-only,html.ro [data-act=bibNovo],html.ro [dat
    id: identifica o backup (um backup de outro app é recusado);
    arquivo: nome do arquivo na pasta reservada do Drive. Se o mesmo ID de cliente Google for usado por mais de um app
    no mesmo endereço (ex.: usuario.github.io), cada app PRECISA de um nome de arquivo diferente. */
-const APP={id:'assistente-pt',nome:'Divisão de Avaliação e Acompanhamento da Gestão - Pareceres Técnicos',arquivo:'daag-pareceres-tecnicos.json',versao:'Versão 0.1 - 10/11/2026'};
+const APP={id:'assistente-pt',nome:'Divisão de Avaliação e Acompanhamento da Gestão - Pareceres Técnicos',arquivo:'daag-pareceres-tecnicos.json',versao:'Versão 0.2 - 10/11/2026'};
 document.title='DAAG - Pareceres Técnicos';document.getElementById('appNome').textContent=APP.nome;document.getElementById('stVer').textContent=APP.versao;
 
 /* ===== Assistente de Parecer Técnico (DAAG3) · sem IA ===== */
@@ -325,7 +325,9 @@ const GRAV={A:'Alta',M:'Média',B:'Baixa'};
 const NOVOS=()=>({auditores:[],modelo:null,biblioteca:JSON.parse(JSON.stringify(BIB_SEED)),analises:[],hist:[],temasExt:{}});
 let DADOS=NOVOS();
 function ptPad(s){return String(s||'').replace(/^PT\s*(\d+)\s*\/\s*(?!DAAG3-)([A-Za-z]{2,4})\s*\/\s*(\d{4})$/,(m,n,g,a)=>`PT ${n}/DAAG3-${g.toUpperCase()}/${a}`)}
-function normaliza(d){const n=Object.assign(NOVOS(),d||{});if(Array.isArray(n.hist))n.hist.forEach(h=>h.pt=ptPad(h.pt));if(!Array.isArray(n.biblioteca)||!n.biblioteca.length)n.biblioteca=JSON.parse(JSON.stringify(BIB_SEED));return n}
+const OUT='OUT-00',OUT_TEMA={tema:OUT,eixo:'A classificar',nome:'Outros (a classificar)',criterio:'Achado ainda sem tema na biblioteca',texto:'',alineas:'',rec:''};
+function garanteOut(n){if(Array.isArray(n.biblioteca)&&!n.biblioteca.some(b=>b.tema===OUT))n.biblioteca.push(Object.assign({},OUT_TEMA))}
+function normaliza(d){const n=Object.assign(NOVOS(),d||{});if(Array.isArray(n.hist))n.hist.forEach(h=>h.pt=ptPad(h.pt));if(!Array.isArray(n.biblioteca)||!n.biblioteca.length)n.biblioteca=JSON.parse(JSON.stringify(BIB_SEED));garanteOut(n);return n}
 const MEM={arq:{}};
 let CUR=null,SUB='inicio';
 const an=()=>DADOS.analises.find(a=>a.id===CUR)||null;
@@ -347,12 +349,17 @@ async function baixar(blob,nome){if(window.claude&&typeof claude.use==='function
 /* ===== Render geral ===== */
 function render(){renderInicio();renderAnalise();renderBib();renderConfig();if(typeof pintaPerfil==='function')pintaPerfil()}
 function siglaDe(g){return norm(g).replace(/[^a-z]/g,'').slice(0,3).toUpperCase()}
-function ptNome(a){return a.numero?`PT ${a.numero}/DAAG3-${a.sigla||'???'}/${a.ano}`:'PT (sem número)'}
+function anoPT(a){return (String(a.dataPT||'').match(/^(\d{4})/)||[])[1]||a.ano||String(new Date().getFullYear())}
+/* Número do PT: atribuído só ao finalizar — o seguinte ao maior número já aprovado no mesmo ano (histórico importado + finalizados no app) */
+function numsAprovados(ano){const n=[];for(const h of DADOS.hist){const m=String(h.pt||'').match(/^PT\s*(\d+)\s*\/.*\/\s*(\d{4})\s*$/);if(m&&m[2]===String(ano))n.push(Number(m[1]))}
+ for(const a of DADOS.analises)if(a.sit==='final'&&a.numero&&String(a.ano)===String(ano))n.push(Number(a.numero));return n}
+function proxNum(ano){const n=numsAprovados(ano);return (n.length?Math.max(...n):0)+1}
+function ptNome(a){return a.sit==='final'&&a.numero?`PT ${a.numero}/DAAG3-${a.sigla||'???'}/${a.ano}`:`PT nº a definir/DAAG3-${a.sigla||'???'}/${anoPT(a)}`}
 function temaNome(c){const b=DADOS.biblioteca.find(x=>x.tema===c);return b?b.nome:(DADOS.temasExt[c]&&DADOS.temasExt[c].nome)||c}
 
 function recorrencia(){
  const m={};
- for(const h of DADOS.hist)for(const x of h.achados||[]){const r=m[x.tema]||(m[x.tema]={tema:x.tema,pts:new Set(),ugs:new Set(),rs:0});r.pts.add(h.pt);r.ugs.add(h.ug);r.rs+=Number(x.valor)||0}
+ for(const h of DADOS.hist)for(const x of h.achados||[]){if(x.tema===OUT)continue;const r=m[x.tema]||(m[x.tema]={tema:x.tema,pts:new Set(),ugs:new Set(),rs:0});r.pts.add(h.pt);r.ugs.add(h.ug);r.rs+=Number(x.valor)||0}
  return Object.values(m).sort((a,b)=>b.ugs.size-a.ugs.size||b.pts.size-a.pts.size||a.tema.localeCompare(b.tema));
 }
 function renderInicio(){
@@ -360,26 +367,31 @@ function renderInicio(){
  $('kAnd').textContent=A.filter(a=>a.sit!=='final').length;
  $('kFin').textContent=DADOS.hist.length;
  const R=recorrencia();$('kSis').textContent=R.filter(r=>r.ugs.size>=3).length;
- $('tbAn').innerHTML=A.map(a=>`<tr><td>${esc(ptNome(a))}</td><td>${esc(a.ug)}</td><td>${esc(a.modalidade)} ${esc(a.nEdital)}</td><td>${esc((a.objeto||'').slice(0,70))}</td><td><span class="tag ${a.sit==='final'?'ok':''}">${a.sit==='final'?'Finalizado':'Em andamento'}</span></td><td class="n" style="white-space:nowrap"><button class="btn sm" data-act="abrir" data-id="${a.id}">Abrir</button> <button class="btn sm red" data-act="excluirAn" data-id="${a.id}">Excluir</button></td></tr>`).join('')||'<tr><td class="vazio" colspan="6">Nenhuma análise ainda. Clique em Nova análise.</td></tr>';
+ $('tbAn').innerHTML=A.filter(a=>a.sit!=='final').map(a=>`<tr><td>${esc(ptNome(a))}</td><td>${esc(a.ug)}</td><td>${esc(a.modalidade)} ${esc(a.nEdital)}</td><td>${esc((a.objeto||'').slice(0,70))}</td><td><span class="tag ${a.sit==='final'?'ok':''}">${a.sit==='final'?'Finalizado':'Em andamento'}</span></td><td class="n" style="white-space:nowrap"><button class="btn sm" data-act="abrir" data-id="${a.id}">Abrir</button> <button class="btn sm red" data-act="excluirAn" data-id="${a.id}">Excluir</button></td></tr>`).join('')||'<tr><td class="vazio" colspan="6">Nenhuma análise em elaboração. Clique em Nova análise. Os pareceres finalizados ficam em "Pareceres emitidos".</td></tr>';
  const H=[...DADOS.hist].sort((x,y)=>String(y.data||'').localeCompare(String(x.data||''))||String(y.pt).localeCompare(String(x.pt)));
- $('tbPar').innerHTML=H.map(h=>{const v=(h.achados||[]).reduce((s,x)=>s+(Number(x.valor)||0),0);return `<tr><td><b>${esc(h.pt)}</b></td><td>${esc(dt(h.data))}</td><td>${esc(h.ug)}</td><td>${esc(h.edital||'')}</td><td>${esc((h.objeto||'').slice(0,70))}</td><td class="n">${(h.achados||[]).length}</td><td class="n">${v?brl(v):'—'}</td><td class="small">${esc((h.achados||[]).map(x=>x.tema).join(', '))}</td></tr>`}).join('')||'<tr><td class="vazio" colspan="8">Nenhum parecer finalizado ainda.</td></tr>';
+ $('tbPar').innerHTML=H.map(h=>{const v=(h.achados||[]).reduce((s,x)=>s+(Number(x.valor)||0),0);return `<tr><td><b>${esc(h.pt)}</b></td><td>${esc(dt(h.data))}</td><td>${esc(h.ug)}</td><td>${esc(h.edital||'')}</td><td>${esc((h.objeto||'').slice(0,70))}</td><td class="n">${(h.achados||[]).length}</td><td class="n">${v?brl(v):'—'}</td><td class="small">${esc((h.achados||[]).map(x=>x.tema).join(', '))}</td><td class="n" style="white-space:nowrap">${(()=>{const a=anDoPT(h.pt);return a?`<button class="btn sm" data-act="abrir" data-id="${a.id}">Abrir</button>${ehPrinc()?` <button class="btn sm red" data-act="excluirAn" data-id="${a.id}">Excluir</button>`:''}`:'<span class="small muted" title="Parecer importado do painel: só o resumo está no app">importado</span>'})()}</td></tr>`}).join('')||'<tr><td class="vazio" colspan="9">Nenhum parecer finalizado ainda.</td></tr>';
  $('recInfo').textContent=DADOS.hist.length?DADOS.hist.length+' pareceres considerados':'';
  $('tbRec').innerHTML=R.map(r=>`<tr><td><b>${esc(r.tema)}</b></td><td>${esc(temaNome(r.tema))}</td><td class="n">${r.pts.size}</td><td class="n">${r.ugs.size}</td><td class="small">${esc([...r.ugs].join(', '))}</td><td class="n">${r.rs?brl(r.rs):'—'}</td><td>${r.ugs.size>=3?'<span class="tag a">Sistêmico</span>':r.pts.size>=2?'<span class="tag m">Recorrente</span>':'<span class="tag">Pontual</span>'}</td></tr>`).join('')||'<tr><td class="vazio" colspan="7">Finalize um parecer ou importe o histórico em Configurações.</td></tr>';
 }
 
 /* ===== Análise ===== */
-function abrir(id){CUR=id;SUB='inicio';renderAnalise();irPara('analise')}
+function anDoPT(pt){return DADOS.analises.find(a=>a.sit==='final'&&ptNome(a)===pt)||null}
+function abrir(id){const a=DADOS.analises.find(x=>x.id===id);if(!a)return;if(window.BASE_RO&&a.sit!=='final')return;CUR=id;SUB=window.BASE_RO?'parecer':'inicio';renderAnalise();irPara('analise')}
 function renderAnalise(){
  const a=an();
  $('anBox').hidden=!a;
  $('btSair').hidden=!a;
  if(!a){$('anTit').textContent='Análise';$('anSit').textContent='';$('anSub').textContent='Abra ou crie uma análise na página Início.';return}
  $('anTit').textContent=ptNome(a);$('anSit').textContent=a.sit==='final'?'Finalizado':'Em andamento';$('anSit').className='tag '+(a.sit==='final'?'ok':'');
- $('anSub').textContent=[a.ug,a.modalidade+' '+a.nEdital,a.objeto].filter(x=>x&&x.trim()).join(' · ')||'Informe os dados do parecer e envie os PDFs do edital.';
+ $('anSub').textContent=[a.ug,a.modalidade+' '+a.nEdital,a.objeto].filter(x=>x&&x.trim()).join(' · ')||(window.BASE_RO?'':'Informe os dados do parecer e envie os arquivos do edital.');
  document.querySelectorAll('#anTabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.sub===SUB?'true':'false'));
  document.querySelectorAll('#anBox section').forEach(s=>s.hidden=s.dataset.sec!==SUB);
  const sec=document.querySelector(`#anBox section[data-sec="${SUB}"]`);
  sec.innerHTML=({inicio:secInicio,edital:secEdital,orcamento:secOrc,roteiro:secRoteiro,parecer:secParecer})[SUB](a);
+ if(window.BASE_RO){$('anSit').textContent='Finalizado · somente leitura';
+  sec.querySelectorAll('input,textarea,select').forEach(e=>{if(e.type!=='file')e.disabled=true});
+  sec.querySelectorAll('[data-act]').forEach(b=>{if(!['gerarDocx','sairAn','compCalc'].includes(b.dataset.act)||b.dataset.act==='compCalc')b.hidden=true});
+  sec.querySelectorAll('.drop').forEach(d=>d.hidden=true)}
 }
 const inp=(path,label,o={})=>`<label class="f">${label}<input data-bind="${path}" value="${esc(getPath(an(),path)??'')}"${o.type?` type="${o.type}"`:''}${o.ph?` placeholder="${esc(o.ph)}"`:''}${o.im?' inputmode="decimal"':''}></label>`;
 const sel=(path,label,opts)=>{const v=getPath(an(),path)??'';return `<label class="f">${label}<select data-bind="${path}" data-rr="1">${opts.map(o=>{const [k,t]=Array.isArray(o)?o:[o,o];return `<option value="${esc(k)}"${String(k)===String(v)?' selected':''}>${esc(t)}</option>`}).join('')}</select></label>`};
@@ -387,14 +399,15 @@ const sel=(path,label,opts)=>{const v=getPath(an(),path)??'';return `<label clas
 function secInicio(a){
  const aud=DADOS.auditores;
  return `<div class="card mb"><h2 style="margin:0 0 12px;font-size:17px">Parecer</h2>
- <div class="grid4">${inp('numero','Nº do PT',{ph:'51'})}${inp('ano','Ano')}${inp('dataPub','Publicação do edital no PNCP',{type:'date'})}${inp('dataPT','Data do PT',{type:'date'})}</div>
+ <div class="grid4"><label class="f">Nº do PT<input disabled value="${a.sit==='final'&&a.numero?esc(a.numero+'/'+a.ano):'definido ao finalizar'}" title="O número é atribuído ao finalizar: o seguinte ao maior já aprovado no ano (hoje seria o ${proxNum(anoPT(a))})."></label>${inp('dataPub','Publicação do edital no PNCP',{type:'date'})}${inp('dataPT','Data do PT',{type:'date'})}</div>
+ ${a.sit==='final'?'':`<p class="small muted" style="margin:8px 0 0">O número é dado ao finalizar: o seguinte ao maior já aprovado em ${esc(anoPT(a))} (hoje seria o <b>${proxNum(anoPT(a))}</b>).</p>`}
  <div class="mt"><span class="small muted">Autor(es), na ordem da assinatura:</span> ${aud.length?aud.map(x=>`<label class="small" style="margin-right:14px"><input type="checkbox" data-act="autor" data-s="${esc(x.sigla)}"${a.autores.includes(x.sigla)?' checked':''}> ${esc(x.guerra)} (${esc(x.sigla)})</label>`).join(''):'<span class="warn small">Cadastre os auditores em Configurações.</span>'}
  ${a.autores.length>1?`<label class="small" style="margin-left:8px">Sigla no número: <select class="in" style="width:auto;display:inline-block" data-bind="sigla" data-rr="1">${a.autores.map(s=>`<option${s===a.sigla?' selected':''}>${esc(s)}</option>`).join('')}</select></label>`:''}</div></div>`+secArquivos(a);
 }
 const CAMPOS=[['modalidade','Modalidade'],['nEdital','Nº do edital'],['uasg','UASG'],['ugNome','Nome da UG'],['ug','Sigla da UG'],['pag','PAG (processo)'],['valor','Valor estimado (R$)'],['regime','Regime de execução'],['prazoDias','Prazo de execução (dias)'],['criterio','Critério de julgamento'],['objeto','Objeto']];
 function secEdital(a){
  const E=a.ext||{};
- if(!a.arquivos.length)return '<div class="card"><p class="warn" style="margin:0">Envie os PDFs na etapa 1. Os dados do edital são lidos dos próprios documentos.</p></div>';
+ if(!a.arquivos.length)return '<div class="card"><p class="warn" style="margin:0">Envie os arquivos na etapa 1. Os dados do edital são lidos dos próprios documentos.</p></div>';
  const nota=k=>{const L=E[k]||[];if(!L.length)return '<span class="warn small">não encontrado nos arquivos: preencha</span>';const vs=distintos(L);const f=L[0];
   return `<span class="small muted">lido em ${esc(curto(f.arq))} p. ${f.p}${a.auto&&a.auto[k]?'':' · editado'}</span>${vs.length>1?`<br><span class="small warn">valores diferentes nos documentos:</span> ${vs.slice(0,4).map(v=>`<button class="btn sm" data-act="usaExt" data-k="${k}" data-v="${esc(v)}" title="usar este valor">${esc(v.length>60?v.slice(0,60)+'…':v)}</button>`).join(' ')} <span class="small muted">(${esc([...new Set(L.map(x=>curto(x.arq)+' p. '+x.p))].slice(0,6).join('; '))})</span>`:''}`};
  const campo=(k,t)=>{if(k==='modalidade')return `<div>${sel('modalidade',t,['Concorrência Eletrônica','Pregão Eletrônico','Concorrência Presencial','Pregão Presencial'])}${nota(k)}</div>`;
@@ -402,7 +415,7 @@ function secEdital(a){
   if(k==='objeto')return `<div style="grid-column:1/-1"><label class="f">${t} (sem aspas)<textarea data-bind="objeto">${esc(a.objeto)}</textarea></label>${nota(k)}</div>`;
   return `<div>${inp(k,t,k==='valor'||k==='prazoDias'?{im:1}:{})}${nota(k)}</div>`};
  return `<div class="card mb"><div class="row"><h2 style="margin:0;font-size:17px">Dados do edital</h2><span class="sp"></span><button class="btn sm" data-act="reExt">Reler dos arquivos</button></div>
- <p class="small muted">Preenchidos a partir dos PDFs. Confira e corrija se preciso: o que você editar não é sobrescrito numa nova leitura. Valores diferentes entre documentos podem ser achado (tema DOC-05).</p>
+ <p class="small muted">Preenchidos a partir dos arquivos. Confira e corrija se preciso: o que você editar não é sobrescrito numa nova leitura. Valores diferentes entre documentos podem ser achado (tema DOC-05).</p>
  <div class="grid3">${CAMPOS.map(([k,t])=>campo(k,t)).join('')}
  <div>${sel('tipoObra','Tipo de obra (Ac. 2.622/2013)',Object.entries(TIPOS).filter(([k])=>k!=='fornecimento').map(([k,t])=>[k,t.nome]))}<span class="small muted">define os quartis de BDI e de administração local</span></div></div></div>`;
 }
@@ -480,19 +493,52 @@ async function lerPDF(file){
  }
  await doc.destroy();pags.tach=tach;return pags;
 }
+function carregaJS(src,teste){return new Promise((ok,no)=>{if(teste())return ok();const s=document.createElement('script');s.src=src;s.onload=()=>teste()?ok():no(new Error('falhou'));s.onerror=()=>no(new Error('falhou'));document.head.appendChild(s)})}
+const RX_PLAN=/\.(xlsx|xlsm|xls|ods|csv)$/i,RX_ARQ=/\.(pdf|xlsx|xlsm|xls|ods|csv)$/i;
+/* Planilhas (Excel/ODS/CSV): cada linha vira uma linha de texto, com as células separadas por espaço e os números no formato brasileiro
+   (1.234,56; percentuais como 20,74%), para passar pelos mesmos leitores do PDF. Cada aba é dividida em "blocos" nas linhas de título
+   (curva ABC, composições, BDI, ISS, planilha orçamentária, cronograma); no inventário e nas referências, "p." indica o bloco. */
+function celTxt(c){
+ if(!c||c.v==null||c.v==='')return '';
+ if(c.t==='n'){const z=String(c.z||'');
+  if(/[dmy]{2}|h:mm/i.test(z)&&!/[0#]/.test(z.replace(/"[^"]*"/g,'')))return String(c.w||'');
+  const pct=/%/.test(z),v=pct?c.v*100:c.v;
+  let d;const m=z.replace(/"[^"]*"/g,'').match(/0[.,](0+)/);
+  if(m)d=m[1].length;else if(/^general$|^@?$/i.test(z)||!z){d=Number.isInteger(v)?0:Math.min(10,(String(+v.toFixed(10)).split('.')[1]||'').length)}else d=0;
+  const grp=/#,##|0,0/.test(z.replace(/"[^"]*"/g,''))||(d>0&&Math.abs(v)>=1000);
+  return v.toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:grp})+(pct?'%':'')}
+ if(c.t==='b')return c.v?'VERDADEIRO':'FALSO';
+ return String(c.w!=null?c.w:c.v).replace(/\s+/g,' ').trim();
+}
+const RX_BLOCO=/curva abc|composic\w+ analitic|composicao do bdi|calculo do iss|planilha orcamentaria|orcamento (sintetico|analitico)|cronograma|memoria de calculo|encargos sociais/;
+function lerPlanilha(data){
+ const wb=XLSX.read(data,{type:'array',cellNF:true,cellText:true});const pags=[];pags.abas=[];
+ for(const nome of wb.SheetNames){const ws=wb.Sheets[nome];if(!ws||!ws['!ref'])continue;const rg=XLSX.utils.decode_range(ws['!ref']);
+  let bloco=[],ini=pags.length,vazia=-1;
+  const fecha=L=>{if(L.length)pags.push(L.join('\n'))};
+  for(let r=rg.s.r;r<=rg.e.r;r++){const cs=[];for(let c=rg.s.c;c<=rg.e.c;c++){const t=celTxt(ws[XLSX.utils.encode_cell({r,c})]);if(t)cs.push(t)}
+   const l=cs.join(' ').replace(/\s+/g,' ').trim();if(!l){vazia=bloco.length;continue}
+   /* título de seção: começa um bloco novo; o cabeçalho logo acima (desde a última linha em branco, até 10 linhas) vai junto */
+   if(RX_BLOCO.test(norm(l).slice(0,120))&&l.length<200&&bloco.length>3){const corte=vazia>=0&&bloco.length-vazia<=10?vazia:(vazia<0&&bloco.length<=10?0:bloco.length);if(corte>0){fecha(bloco.slice(0,corte));bloco=bloco.slice(corte)}vazia=-1}
+   bloco.push(l)}
+  fecha(bloco);if(pags.length>ini)pags.abas.push(nome+' (p. '+(ini+1)+(pags.length>ini+1?'–'+pags.length:'')+')');
+ }
+ return pags;
+}
 async function carregarArquivos(files){
  const a=an();if(!a)return;
- if(!window.pdfjsLib){toast('O leitor de PDF não carregou. Verifique a conexão e recarregue a página.');return}
  const box=MEM.arq[a.id]||(MEM.arq[a.id]={});
  let n=0;
+ files=[...files].filter(f=>RX_ARQ.test(f.name));
+ if(files.some(f=>/\.pdf$/i.test(f.name))&&!window.pdfjsLib){toast('O leitor de PDF não carregou. Verifique a conexão e recarregue a página.');return}
+ if(files.some(f=>RX_PLAN.test(f.name))){try{await carregaJS('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',()=>window.XLSX)}catch(e){toast('O leitor de planilhas não carregou. Verifique a conexão e recarregue a página.');return}}
  for(const f of files){
-  if(!/\.pdf$/i.test(f.name))continue;
   const ign=/estudo ?tecnico ?preliminar|\betp\b/.test(norm(f.name.replace(/[-_]/g,' ')));
   toast('Lendo '+f.name+'…');
   try{
-   const pags=ign?[]:await lerPDF(f);
+   const pags=ign?[]:RX_PLAN.test(f.name)?lerPlanilha(new Uint8Array(await f.arrayBuffer())):await lerPDF(f);
    box[f.name]=pags;
-   const meta={nome:f.name,pags:pags.length,palavras:pags.reduce((s,p)=>s+p.split(/\s+/).filter(Boolean).length,0),ocr:pags.map((p,i)=>p.split(/\s+/).filter(Boolean).length<40?i+1:0).filter(Boolean),tach:Object.keys(pags.tach||{}).map(Number),ignorado:ign};
+   const meta={nome:f.name,plan:RX_PLAN.test(f.name)||undefined,abas:pags.abas,pags:pags.length,palavras:pags.reduce((s,p)=>s+p.split(/\s+/).filter(Boolean).length,0),ocr:pags.map((p,i)=>p.split(/\s+/).filter(Boolean).length<40?i+1:0).filter(Boolean),tach:Object.keys(pags.tach||{}).map(Number),ignorado:ign};
    a.arquivos=a.arquivos.filter(x=>x.nome!==f.name);a.arquivos.push(meta);n++;
   }catch(e){toast('Não consegui ler '+f.name+': '+(e.message||e))}
  }
@@ -509,10 +555,10 @@ function hitsTxt(a,keys){if(!a.triagem)return '';const out=[];for(const k of key
 function secArquivos(a){
  const lidos=MEM.arq[a.id]||{};
  const T=a.triagem;
- return `<div class="card mb"><div class="drop" id="drop"><p style="margin:0 0 10px"><b>Arraste aqui os PDFs do edital</b> (edital, TR, minuta, orçamento, curvas ABC, BDI, memorial, projetos, ART/RRT…)</p><button class="btn pri" data-act="escolherPdf">Escolher arquivos</button><input type="file" id="pdfIn" accept=".pdf" multiple hidden>
- <p class="small" style="margin:10px 0 0">A leitura é feita no seu navegador; os PDFs não são enviados a lugar nenhum nem guardados no Drive (só os resultados). O ETP é ignorado. Trechos tachados são descartados da leitura (as páginas aparecem no inventário); em caso de dúvida, confira na página.</p></div></div>
+ return `<div class="card mb"><div class="drop" id="drop"><p style="margin:0 0 10px"><b>Arraste aqui os arquivos do edital</b> em PDF ou planilha (Excel, ODS ou CSV): edital, TR, minuta, orçamento, curvas ABC, BDI, memorial, projetos, ART/RRT…</p><button class="btn pri" data-act="escolherPdf">Escolher arquivos</button><input type="file" id="pdfIn" accept=".pdf,.xlsx,.xlsm,.xls,.ods,.csv" multiple hidden>
+ <p class="small" style="margin:10px 0 0">A leitura é feita no seu navegador; os arquivos não são enviados a lugar nenhum nem guardados no Drive (só os resultados). Nas planilhas, cada aba é dividida em blocos (curva ABC, composições, BDI…) e "p." indica o bloco. O ETP é ignorado. Trechos tachados são descartados da leitura (as páginas aparecem no inventário); em caso de dúvida, confira na página.</p></div></div>
  <div class="card mb"><h2 style="margin:0 0 10px;font-size:17px">Inventário</h2><div class="tbl"><table><thead><tr><th>Arquivo</th><th class="n">Páginas</th><th class="n">Palavras</th><th>Páginas p/ OCR (texto quase vazio)</th><th>Págs. com texto tachado (descartado)</th><th>Nesta sessão</th></tr></thead><tbody>
- ${a.arquivos.map(f=>`<tr><td>${esc(curto(f.nome))}</td><td class="n">${f.ignorado?'—':f.pags}</td><td class="n">${f.ignorado?'—':f.palavras}</td><td>${f.ignorado?'ignorado (ETP)':esc(f.ocr.join(', ')||'—')}</td><td>${f.ignorado?'':esc((f.tach||[]).join(', ')||'—')}</td><td>${lidos[f.nome]?'<span class="tag ok">lido</span>':'<span class="tag">reenviar p/ reler</span>'}</td></tr>`).join('')||'<tr><td class="vazio" colspan="6">Nenhum arquivo lido.</td></tr>'}</tbody></table></div></div>
+ ${a.arquivos.map(f=>`<tr><td>${esc(curto(f.nome))}${f.plan?`<div class="small muted">planilha · abas: ${esc((f.abas||[]).join('; '))}</div>`:''}</td><td class="n">${f.ignorado?'—':f.pags}${f.plan?' blocos':''}</td><td class="n">${f.ignorado?'—':f.palavras}</td><td>${f.ignorado?'ignorado (ETP)':f.plan?'—':esc(f.ocr.join(', ')||'—')}</td><td>${f.ignorado||f.plan?'—':esc((f.tach||[]).join(', ')||'—')}</td><td>${lidos[f.nome]?'<span class="tag ok">lido</span>':'<span class="tag">reenviar p/ reler</span>'}</td></tr>`).join('')||'<tr><td class="vazio" colspan="6">Nenhum arquivo lido.</td></tr>'}</tbody></table></div></div>
  ${T?`<div class="card mb"><h2 style="margin:0 0 10px;font-size:17px">Texto de modelo não preenchido (${T.ph.length})</h2>${T.ph.length?`<ul class="lst small">${T.ph.slice(0,60).map(x=>`<li><b>${esc(curto(x.arq))} p. ${x.p}</b>: ${esc(x.t)}</li>`).join('')}</ul>`:'<p class="muted small">Nada encontrado.</p>'}</div>
  <div class="card"><h2 style="margin:0 0 10px;font-size:17px">Opções marcadas "( X )" (${T.x.length})</h2>${T.x.length?`<ul class="lst small">${T.x.slice(0,60).map(x=>`<li><b>${esc(curto(x.arq))} p. ${x.p}</b>: ${esc(x.t)}</li>`).join('')}</ul>`:'<p class="muted small">Nada encontrado.</p>'}</div>`:''}`;
 }
@@ -532,7 +578,7 @@ function lerOrcamento(a){
    const s=secaoDe(t);if(s)sec=s;else if(/composic\w+ analitic|cronograma|composicao do bdi|planilha orcamentaria resumida|orcamento analitico/.test(norm(t).slice(0,1500)))sec=null;
    for(const m of t.matchAll(/\b(SINAPI|SICRO\d?|EMOP|SBC|SCO|ORSE|SEINFRA|SEDOP|CPOS|FDE|SETOP|IOPES|AGETOP|SUDECAP|DNIT)\s*-\s*(\d{2}\/\d{4})\s*-\s*([A-ZÀ-Ú][a-zà-ú]+(?: (?:de|do|da|dos|das|(?!N[ãa]o\b|Desonerado)[A-ZÀ-Ú][a-zà-ú]+))*)/gm)){const k=m[1]+' – '+m[2];if(!bancos.has(k)||bancos.get(k).length<m[3].length)bancos.set(k,m[3])}
    if(!sec)return;
-   if(bdiCab==null){const m=t.slice(0,800).match(/(\d{1,2},\d{2})\s?%/);if(m)bdiCab=pn(m[1])}
+   if(bdiCab==null){const m=t.slice(0,800).match(/B\.?\s?D\.?\s?I\b\.?[\s\S]{0,300}?(\d{1,2},\d{2})\s?%/);if(m)bdiCab=pn(m[1])}
    if(regCab==null){const n=norm(t.slice(0,800));regCab=n.includes('nao desonerado')?'Não desonerado':n.includes('desonerado')?'Desonerado':null}
    const m1=t.match(/Total sem BDI\s+([\d.,]+)/i);if(m1)tsb=pn(m1[1]);const m2=t.match(/Total Geral\s+([\d.,]+)/i);if(m2)tg=pn(m2[1]);const m3=t.match(/Total do BDI\s+([\d.,]+)/i);if(m3)tbdi=pn(m3[1]);
    const ls=t.split('\n');
@@ -573,7 +619,7 @@ function lerOrcamento(a){
 
 /* ----- Composições analíticas: só os itens da Faixa A da Curva ABC de Serviços ----- */
 const chaveDesc=d=>norm(d).replace(/^\s*\S*\d\S*\s+/,'').replace(/\b(sinapi|sicro\d?|emop|sbc|sco|orse|proprio|seinfra|sedop|cpos|fde)\b/g,'').replace(/[^a-z]/g,'').slice(0,18);
-const RX_CMAIN=new RegExp(`^Composi[çc][ãa]o\\s+(\\S+)\\s+(\\S+)\\s+(.+?)\\s+(\\S{1,8})\\s+1,0+\\s+${N}\\s+${N}$`);
+const RX_CMAIN=new RegExp(`^Composi[çc][ãa]o\\s+(\\S+)\\s+(\\S+)\\s+(.+?)\\s+(\\S{1,8})\\s+1(?:,0+)?\\s+${N}\\s+${N}$`);
 const RX_CITEM=new RegExp(`^(Composi[çc][ãa]o|Insumo)\\s+(\\S+)\\s+(\\S+)\\s+(.+?)\\s+(\\S{1,8})\\s+${N}\\s+${N}\\s+${N}\\s+${N}$`);
 const RX_CHEAD=/^\d+(\.\d+)+\s+C[óo]digo\s+Banco\s+Descri/;
 const RX_MO=/servente|pedreiro|armador|carpinteiro|pintor|eletricista|encanador|bombeiro|ajudante|operador|motorista|soldador|montador|azulejista|gesseiro|vidraceiro|serralheiro|engenheiro|mestre de obras|encarregado|apontador|laboratorista|topografo|tecnico|vigia|marteleteiro|calceteiro|impermeabilizador|mao de obra|mao-de-obra/;
@@ -674,7 +720,7 @@ function secOrc(a){
  const linhaF=(r,i)=>`<tr><td class="n">${i+1}</td><td>${esc(r.banco)}</td><td>${esc(r.desc.slice(0,110))}</td><td>${esc(r.und)}</td><td class="n">${fmt(r.q,2)}</td><td class="n">${fmt(r.pu)}</td><td class="n">${fmt(r.tot)}</td><td class="n">${fmt(r.acum,1)}</td><td>${oficial(r.banco)?'':`<span class="tag ${ehMO(r)?'a':'m'}">${ehMO(r)?'mão de obra fora SINAPI/SICRO':'fora SINAPI/SICRO'}</span>`}</td><td class="small">${esc(curto(r.arq))} p.${r.pag}</td></tr>`;
  const cab='<thead><tr><th class="n">#</th><th>Banco</th><th>Descrição</th><th>Und</th><th class="n">Quant.</th><th class="n">P. unit</th><th class="n">Total</th><th class="n">Acum. %</th><th></th><th>Fonte</th></tr></thead>';
  let h=`<div class="card mb"><h2 style="margin:0 0 8px;font-size:17px">Leitura do orçamento</h2>`;
- if(!temCurvas)h+=`<p class="warn">Nenhuma Curva ABC lida. Envie os PDFs das Curvas ABC de Serviços e de Insumos na etapa 1.</p>`;
+ if(!temCurvas)h+=`<p class="warn">Nenhuma Curva ABC lida. Envie as Curvas ABC de Serviços e de Insumos (PDF ou planilha) na etapa 1.</p>`;
  else h+=`<ul class="lst small">
   <li>Bancos/data-base: ${esc(o.bancos.join('; ')||'não identificados')}</li>
   <li>BDI no cabeçalho: ${o.bdiCab!=null?pct(o.bdiCab):'—'} · Encargos: ${esc(o.regCab||'—')}</li>
@@ -755,7 +801,7 @@ function contexto(a){
  if(avaliar)recs.push('Avaliem a oportunidade e conveniência de dar prosseguimento ao certame diante das fragilidades apontadas');
  const ugTxt=a.ugNome?`${a.ugNome} (${a.ug})`:a.ug;
  return {
-  numero:a.numero,sigla:a.sigla,ano:a.ano,data_extenso:extenso(a.dataPT),
+  numero:a.sit==='final'&&a.numero?a.numero:'XX',sigla:a.sigla,ano:a.sit==='final'&&a.numero?a.ano:anoPT(a),data_extenso:extenso(a.dataPT),
   assunto:`Análise d${prega?'o':'a'} ${modal} nº ${a.nEdital}, ${prega?'publicado':'publicada'} no Portal Nacional de Contratações Públicas do Governo Federal no`,
   publicacao:pubExt,referencia_edital:refEd,pag:a.pag,edital_artigo:prega?'do':'da',publicado:prega?'publicado':'publicada',
   objeto:`Ao analisar, sob o escopo definido pela Divisão de Avaliação e Acompanhamento da Gestão (DAAG), o Edital em apreço, cujo objeto é a “${(a.objeto||'').trim()}”, sob responsabilidade do ${ugTxt}, bem como os documentos anexos, verificou-se que:`,
@@ -771,7 +817,7 @@ function ordenados(a){const o={A:0,M:1,B:2};return a.achados.map((x,i)=>({x,i}))
 function checklist(a){
  const C=[],e=(ok,t)=>C.push({ok,t});
  e(!!DADOS.modelo,'Modelo do PT 48 enviado (Configurações)');
- e(!!a.numero&&!!a.sigla,'Número do PT e sigla do autor informados');
+ e(!!a.sigla,'Autor (sigla) informado');
  e(a.autores.length>0,'Autor(es) marcado(s)');
  e(!!a.dataPub&&!!a.pag&&!!a.uasg&&!!a.nEdital&&!!a.ug&&!!a.objeto,'Dados do edital completos (publicação no PNCP, PAG, UASG, nº, UG, objeto)');
  const txt=[...a.conformes,...a.achados.flatMap(x=>[x.texto,x.alineas,x.rec])].join('\n');
@@ -784,7 +830,7 @@ function checklist(a){
 }
 function secParecer(a){
  const C=contexto(a),ck=checklist(a);
- const ach=a.achados.map((x,i)=>`<div class="it"><div class="row"><b>Achado ${i+1}</b><select class="in" style="width:auto" data-bind="achados.${i}.tema" data-rr="1">${DADOS.biblioteca.map(b=>`<option value="${esc(b.tema)}"${b.tema===x.tema?' selected':''}>${esc(b.tema)} · ${esc(b.nome.slice(0,50))}</option>`).join('')}</select><select class="in" style="width:auto" data-bind="achados.${i}.grav" data-rr="1">${Object.entries(GRAV).map(([k,t])=>`<option value="${k}"${x.grav===k?' selected':''}>Gravidade ${t}</option>`).join('')}</select><span class="sp"></span><button class="btn sm" data-act="achUp" data-i="${i}">↑</button><button class="btn sm" data-act="achDn" data-i="${i}">↓</button><button class="btn sm red" data-act="achDel" data-i="${i}">Excluir</button></div>
+ const ach=a.achados.map((x,i)=>`<div class="it"><div class="row"><b>Achado ${i+1}</b><select class="in" style="width:auto;max-width:420px" data-bind="achados.${i}.tema" data-rr="1">${DADOS.biblioteca.map(b=>`<option value="${esc(b.tema)}"${b.tema===x.tema?' selected':''}>${esc(b.tema)} · ${esc(b.nome.slice(0,50))}</option>`).join('')}</select><select class="in" style="width:auto" data-bind="achados.${i}.grav" data-rr="1">${Object.entries(GRAV).map(([k,t])=>`<option value="${k}"${x.grav===k?' selected':''}>Gravidade ${t}</option>`).join('')}</select><button class="btn sm" data-act="achTemaNovo" data-i="${i}" title="Cria um tema na Biblioteca com o texto, as alíneas e a recomendação deste achado">Criar tema com este achado</button><span class="sp"></span><button class="btn sm" data-act="achUp" data-i="${i}">↑</button><button class="btn sm" data-act="achDn" data-i="${i}">↓</button><button class="btn sm red" data-act="achDel" data-i="${i}">Excluir</button></div>
   <label class="f mt">Texto do parágrafo (condição, critério e efeito)<textarea data-bind="achados.${i}.texto" style="min-height:120px">${esc(x.texto)}</textarea></label>
   <label class="f mt">Alíneas (uma por linha; deixe vazio se não houver)<textarea data-bind="achados.${i}.alineas">${esc(x.alineas||'')}</textarea></label>
   <div class="grid3 mt"><label class="f" style="grid-column:span 2">Recomendação<input data-bind="achados.${i}.rec" value="${esc(x.rec||'')}"></label><label class="f">Efeito estimado (R$)<input data-bind="achados.${i}.valor" value="${esc(x.valor||'')}" inputmode="decimal"></label></div>
@@ -797,7 +843,7 @@ function secParecer(a){
   <p class="small muted">Valor total estimado: <b>${brl(a.achados.reduce((s,x)=>s+nz(x.valor),0))}</b></p>${ach||'<p class="muted small">Nenhum achado. Use "+ Achado" no Roteiro ou na Calculadora de efeitos.</p>'}
   <div class="row"><label class="f" style="max-width:420px">Recomendação de avaliar o prosseguimento do certame<select data-bind="avaliar" data-rr="1"><option value="auto"${a.avaliar==='auto'?' selected':''}>Automática (só se houver achado de gravidade Alta)</option><option value="sim"${a.avaliar==='sim'?' selected':''}>Incluir</option><option value="nao"${a.avaliar==='nao'?' selected':''}>Não incluir</option></select></label></div></div>
  <div class="card mb"><h2 style="margin:0 0 8px;font-size:17px">Checklist de revisão</h2><ul class="lst small">${ck.map(c=>`<li class="${c.ok?'okc':'err'}">${c.ok?'✓':'✗'} <span style="color:var(--tx);font-weight:400">${esc(c.t)}</span></li>`).join('')}</ul>
-  <div class="row mt"><button class="btn pri" data-act="gerarDocx">Gerar .docx</button><button class="btn" data-act="finalizar">${a.sit==='final'?'Atualizar registro na recorrência':'Finalizar (registrar na recorrência)'}</button><span class="sp"></span><span class="small muted">O PDF sai do Word (Salvar como PDF).</span></div></div>
+  <div class="row mt"><button class="btn pri" data-act="gerarDocx">Gerar .docx</button><button class="btn" data-act="finalizar">${a.sit==='final'?'Atualizar registro na recorrência':'Finalizar (dá o número e registra na recorrência)'}</button><span class="sp"></span><span class="small muted">O PDF sai do Word (Salvar como PDF).</span></div></div>
  <h2 style="font-size:17px">Prévia do texto</h2>${pv}`;
 }
 
@@ -870,13 +916,19 @@ function addAchado(a,tema,extra){
  const x=Object.assign({id:uid(),tema,grav:'M',texto:b.texto||'',alineas:b.alineas||'',rec:b.rec||'',valor:'',resumo:''},extra||{});
  a.achados.push(x);return x;
 }
-function escolherTema(cb,sug){
- const L=DADOS.biblioteca;
- dialogo(`<h2 style="margin:0 0 10px;font-size:18px">Escolha o tema do achado</h2><input class="in mb" id="dtQ" placeholder="Buscar"><div id="dtL" style="max-height:55vh;overflow:auto"></div><div class="row mt"><span class="sp"></span><button class="btn" id="dtX">Cancelar</button></div>`);
- const pinta=()=>{const q=norm($('dtQ').value);$('dtL').innerHTML=L.filter(b=>!q||norm(b.tema+' '+b.nome+' '+b.eixo).includes(q)).map(b=>`<button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;font-weight:500${sug&&sug.includes(b.tema)?';border-color:var(--g)':''}" data-t="${esc(b.tema)}"><b>${esc(b.tema)}</b> · ${esc(b.nome)} <span class="small muted">(${esc(b.eixo)})</span></button>`).join('')};
+function escolherTema(cb,sug,pre){
+ const L=DADOS.biblioteca.filter(b=>b.tema!==OUT);
+ dialogo(`<h2 style="margin:0 0 10px;font-size:18px">Escolha o tema do achado</h2><input class="in mb" id="dtQ" placeholder="Buscar"><div id="dtL" style="max-height:50vh;overflow:auto"></div>
+ <div class="row mt" style="flex-wrap:wrap;gap:6px"><button class="btn" id="dtNovo">+ Novo tema</button><button class="btn" id="dtOut" title="Registra o achado agora; o tema é definido depois, na Biblioteca">Outros (a classificar)</button><span class="sp"></span><button class="btn" id="dtX">Cancelar</button></div>`);
+ const pinta=()=>{const q=norm($('dtQ').value);$('dtL').innerHTML=L.filter(b=>!q||norm(b.tema+' '+b.nome+' '+b.eixo).includes(q)).map(b=>`<button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;font-weight:500${sug&&sug.includes(b.tema)?';border-color:var(--g)':''}" data-t="${esc(b.tema)}"><b>${esc(b.tema)}</b> · ${esc(b.nome)} <span class="small muted">(${esc(b.eixo)})</span></button>`).join('')||'<p class="muted small">Nenhum tema encontrado. Use "+ Novo tema" ou "Outros (a classificar)".</p>'};
  pinta();$('dtQ').oninput=pinta;$('dtX').onclick=fechaDlg;
  $('dtL').onclick=e=>{const t=e.target.closest('[data-t]');if(!t)return;fechaDlg();cb(t.dataset.t)};
+ $('dtOut').onclick=()=>{fechaDlg();cb(OUT)};
+ $('dtNovo').onclick=()=>{const q=$('dtQ').value.trim();fechaDlg();editaBib(null,{cb,pre:Object.assign({nome:q},pre||{})})};
 }
+/* código sugerido para tema novo: prefixo do eixo + próximo número */
+function proxCodigo(eixo){const L=DADOS.biblioteca.filter(b=>b.eixo===eixo&&b.tema!==OUT);const pf=L.length?(L[0].tema.match(/^([A-Z]+)-/)||[])[1]:null;const P=pf||'NOV';
+ const n=DADOS.biblioteca.map(b=>(b.tema.match(new RegExp('^'+P+'-(\\d+)$'))||[])[1]).filter(Boolean).map(Number);return P+'-'+String((n.length?Math.max(...n):0)+1).padStart(2,'0')}
 const SUG={e:['BDI-01','BDI-02','BDI-03'],f:['ORC-01','REJ-02'],g:['ORC-05'],i:['REG-01','REG-02','DOC-04'],j:['HAB-01'],k:['PRJ-01','INF-00'],l:['REJ-01','REJ-02','REJ-04'],m:['ORC-03'],n:['BDI-01','DES-01'],C1:['ORC-01','ORC-02','ORC-08','ORC-09','ORC-10','ORC-11'],C2:['DOC-04'],C4:['COM-04','COM-02'],C5:['DOC-01'],C8:['ORC-07','DOC-05'],c:['PRJ-01'],a:['COM-01']};
 function textoAuto(a,tema){
  const R=calcOrc(a),o=a.orc,T=R.T;
@@ -891,11 +943,14 @@ async function acao(act,el){
  switch(act){
   case 'nova':{const x=novaAnalise();Store.touch();abrir(x.id);break}
   case 'abrir':abrir(el.dataset.id);break;
-  case 'excluirAn':{if(!await pergunta('Excluir esta análise? O registro na recorrência (se finalizada) é mantido.','Excluir'))return;DADOS.analises=DADOS.analises.filter(x=>x.id!==el.dataset.id);if(CUR===el.dataset.id)CUR=null;Store.touch();render();break}
+  case 'excluirAn':{const ax=DADOS.analises.find(x=>x.id===el.dataset.id);if(!ax)return;
+   if(ax.sit==='final'){if(!ehPrinc()){toast('Só o e-mail principal pode excluir um parecer finalizado.');return}
+    if(!await pergunta(`Excluir a análise do ${ptNome(ax)}? Ela não poderá mais ser aberta nem gerar o .docx. O registro na recorrência e em "Pareceres emitidos" é mantido (como importado). Esta ação não pode ser desfeita.`,'Excluir definitivamente'))return}
+   else if(!await pergunta('Excluir esta análise em elaboração? Esta ação não pode ser desfeita.','Excluir'))return;DADOS.analises=DADOS.analises.filter(x=>x.id!==el.dataset.id);if(CUR===el.dataset.id)CUR=null;Store.touch();render();break}
   case 'autor':{const s=el.dataset.s;a.autores=el.checked?[...a.autores.filter(x=>x!==s),s]:a.autores.filter(x=>x!==s);if(!a.sigla&&a.autores[0])a.sigla=a.autores[0];Store.touch();renderAnalise();break}
   case 'sairAn':{await Store.flush();CUR=null;renderAnalise();irPara('inicio');break}
   case 'escolherPdf':$('pdfIn').click();break;
-  case 'reExt':{if(!Object.keys(MEM.arq[a.id]||{}).length){toast('Envie de novo os PDFs na etapa 1 para reler (eles não ficam guardados).');return}extrairEdital(a);Store.touch();renderAnalise();toast('Dados relidos dos arquivos.');break}
+  case 'reExt':{if(!Object.keys(MEM.arq[a.id]||{}).length){toast('Envie de novo os arquivos na etapa 1 para reler (eles não ficam guardados).');return}extrairEdital(a);Store.touch();renderAnalise();toast('Dados relidos dos arquivos.');break}
   case 'usaExt':{const k=el.dataset.k;a[k]=el.dataset.v;a.auto=a.auto||{};a.auto[k]=false;Store.touch();renderAnalise();break}
   case 'alSel':{const i=+el.dataset.i;a.orc.alSel=el.checked?[...a.orc.alSel,i]:a.orc.alSel.filter(x=>x!==i);Store.touch();renderAnalise();break}
   case 'compCalc':{const r=a.orc.serv[+el.dataset.i];a.orc.efeitos.push({desc:(r.cod?r.cod+' ':'')+r.desc.replace(/^\S+\s+\S+\s+/,'').slice(0,60),modo:'p',a:fmt(r.q,2),b:fmt(r.pu),c:''});Store.touch();renderAnalise();toast('Linha criada na calculadora: informe o preço plausível.');break}
@@ -915,16 +970,33 @@ async function acao(act,el){
   case 'ordemManual':a.ordemManual=el.checked;Store.touch();renderAnalise();break;
   case 'gerarDocx':{
    if(!DADOS.modelo){toast('Envie o modelo do PT 48 em Configurações.');return}
-   try{const C=contexto(a);const blob=await gerarDocx(C,DADOS.modelo.b64);baixar(blob,`PT_${a.numero||'X'}_DAAG3-${a.sigla||'XXX'}_${a.ano}.docx`)}catch(e){toast('Não consegui gerar: '+(e.message||e))}
+   try{const C=contexto(a);const blob=await gerarDocx(C,DADOS.modelo.b64);baixar(blob,a.sit==='final'&&a.numero?`PT_${a.numero}_DAAG3-${a.sigla||'XXX'}_${a.ano}.docx`:`PT_XX_DAAG3-${a.sigla||'XXX'}_${anoPT(a)}_minuta.docx`);if(a.sit!=='final')toast('Minuta gerada com o número "XX": o número é dado ao finalizar.')}catch(e){toast('Não consegui gerar: '+(e.message||e))}
    break}
   case 'finalizar':{
-   const pt=`PT ${a.numero}/DAAG3-${a.sigla}/${a.ano}`;
-   if(!a.numero||!a.sigla){toast('Informe o número do PT e o autor na etapa 1.');return}
-   const g={};for(const x of a.achados){const r=g[x.tema]||(g[x.tema]={tema:x.tema,resumo:[],valor:0});if(x.resumo)r.resumo.push(x.resumo);r.valor+=nz(x.valor)}
-   const reg={pt,data:a.dataPT,ug:a.ug,autor:a.sigla,edital:a.nEdital,modalidade:a.modalidade,objeto:a.objeto,valor:num(a.valor)||null,avaliar:contexto(a).recomendacoes.some(r=>/prosseguimento/.test(r)),origem:'app',achados:Object.values(g).map(r=>({tema:r.tema,resumo:r.resumo.join('; '),valor:r.valor||null}))};
-   DADOS.hist=DADOS.hist.filter(h=>h.pt!==pt).concat(reg);a.sit='final';a.finalEm=new Date().toISOString();Store.touch();render();toast(pt+' registrado na recorrência ('+reg.achados.length+' tema(s)).');break}
+   if(!a.sigla){toast('Marque o autor na etapa 1.');return}
+   let x=a;
+   if(x.sit!=='final'){
+    await Store.flush();try{await Store.sync()}catch(e){}
+    x=an();if(!x)return;
+    const ano=anoPT(x),n=proxNum(ano),ptN=`PT ${n}/DAAG3-${x.sigla}/${ano}`;
+    if(!await pergunta(`Finalizar como ${ptN}? É o seguinte ao maior número já aprovado em ${ano}. Depois de finalizado, o número não muda.`,'Finalizar'))return;
+    x=an();if(!x)return;
+    const n2=proxNum(ano);x.numero=String(n2);x.ano=ano;
+   }
+   const pt=`PT ${x.numero}/DAAG3-${x.sigla}/${x.ano}`;
+   const g={};for(const y of x.achados){const r=g[y.tema]||(g[y.tema]={tema:y.tema,resumo:[],valor:0});if(y.resumo)r.resumo.push(y.resumo);r.valor+=nz(y.valor)}
+   const reg={pt,data:x.dataPT,ug:x.ug,autor:x.sigla,edital:x.nEdital,modalidade:x.modalidade,objeto:x.objeto,valor:num(x.valor)||null,avaliar:contexto(x).recomendacoes.some(r=>/prosseguimento/.test(r)),origem:'app',achados:Object.values(g).map(r=>({tema:r.tema,resumo:r.resumo.join('; '),valor:r.valor||null}))};
+   const novo=x.sit!=='final';
+   DADOS.hist=DADOS.hist.filter(h=>h.pt!==pt).concat(reg);x.sit='final';if(novo)x.finalEm=new Date().toISOString();Store.touch();render();
+   toast(pt+(novo?' finalizado e registrado na recorrência (':' atualizado na recorrência (')+reg.achados.length+' tema(s)).');
+   if(novo){await Store.flush();const dup=DADOS.hist.filter(h=>h.pt!==pt&&(String(h.pt).match(/^PT\s*(\d+)\s*\/.*\/\s*(\d{4})/)||[]).slice(1).join('/')===x.numero+'/'+x.ano);if(dup.length)toast('Atenção: '+dup.map(h=>h.pt).join(', ')+' tem o mesmo número (finalizado ao mesmo tempo por outra pessoa). Confira.')}
+   break}
   case 'bibNovo':editaBib(null);break;
   case 'bibEd':editaBib(el.dataset.t);break;
+  case 'classif':{const r=aClassificar()[+el.dataset.i];if(!r||!r.fin)break;const h=DADOS.hist[r.hi],x=h&&h.achados[r.xi];if(!x)break;
+   escolherTema(t=>{x.tema=t;const an=DADOS.analises.find(z=>z.sit==='final'&&ptNome(z)===h.pt);if(an){const y=an.achados.find(z=>z.tema===OUT&&(!x.resumo||z.resumo===x.resumo||String(x.resumo).includes(z.resumo||'\u0000')));if(y)y.tema=t}
+    Store.touch();renderBib();toast('Achado de '+h.pt+' classificado em '+t+'.')},null,{texto:x.resumo||''});break}
+  case 'achTemaNovo':{const x=a.achados[+el.dataset.i];if(!x)break;editaBib(null,{pre:{texto:x.texto||'',alineas:x.alineas||'',rec:x.rec||''},cb:t=>{x.tema=t;Store.touch();renderAnalise()}});break}
   case 'mdUp':$('mdFile').click();break;
   case 'hiUp':$('hiFile').click();break;
   case 'audEd':{const x=DADOS.auditores.find(y=>y.sigla===el.dataset.s);if(!x)break;AUD_ED=x.sigla;$('audG').value=x.guerra;$('audS').value=x.sigla;$('audN').value=x.nome;$('audBt').textContent='Salvar';$('audCanc').hidden=false;$('audG').focus();$('fmAud').scrollIntoView({block:'center'});break}
@@ -934,21 +1006,26 @@ async function acao(act,el){
 
 /* ===== Biblioteca ===== */
 function usadoEm(t){return DADOS.hist.filter(h=>(h.achados||[]).some(x=>x.tema===t)).map(h=>h.pt)}
+function aClassificar(){const R=[];DADOS.hist.forEach((h,hi)=>(h.achados||[]).forEach((x,xi)=>{if(x.tema===OUT)R.push({pt:h.pt,ug:h.ug,resumo:x.resumo,valor:x.valor,hi,xi,fin:true})}));
+ DADOS.analises.filter(a=>a.sit!=='final').forEach(a=>a.achados.forEach((x,xi)=>{if(x.tema===OUT)R.push({pt:ptNome(a)+' (em andamento)',ug:a.ug,resumo:x.resumo||String(x.texto||'').slice(0,160),valor:x.valor,an:a.id,xi})}));return R}
 function renderBib(){
- const q=norm(($('bibQ')||{}).value||'');const L=DADOS.biblioteca.filter(b=>!q||norm(b.tema+' '+b.nome+' '+b.criterio+' '+b.eixo).includes(q));
+ const AC=aClassificar();
+ const cab=AC.length?`<div class="card mb"><h2 style="margin:0 0 6px;font-size:17px">Achados a classificar (${AC.length})</h2><p class="small muted" style="margin:0 0 10px">Registrados como "Outros (a classificar)". Leia-os juntos para decidir se formam um tema novo ou se entram num tema existente; ao classificar, a recorrência é atualizada.</p><div class="tbl"><table><thead><tr><th>Parecer</th><th>UG</th><th>Resumo</th><th class="n">R$</th><th></th></tr></thead><tbody>${AC.map((r,i)=>`<tr><td>${esc(r.pt)}</td><td>${esc(r.ug||'')}</td><td>${esc(r.resumo||'—')}</td><td class="n">${r.valor?fmt(r.valor):'—'}</td><td class="n">${r.fin?`<button class="btn sm ed-only" data-act="classif" data-i="${i}">Classificar</button>`:'<span class="small muted">na análise</span>'}</td></tr>`).join('')}</tbody></table></div></div>`:'';
+ const q=norm(($('bibQ')||{}).value||'');const L=DADOS.biblioteca.filter(b=>b.tema!==OUT).filter(b=>!q||norm(b.tema+' '+b.nome+' '+b.criterio+' '+b.eixo).includes(q));
  const eixos=[...new Set(L.map(b=>b.eixo))];
- $('bibList').innerHTML=eixos.map(e=>`<h2 style="font-size:17px;margin:22px 0 10px">${esc(e)}</h2>`+L.filter(b=>b.eixo===e).map(b=>{const u=usadoEm(b.tema);return `<div class="it"><div class="hd"><span class="tag">${esc(b.tema)}</span><div class="sp"><h3>${esc(b.nome)}</h3><div class="small muted">Critério: ${esc(b.criterio)}</div><p class="small" style="margin:8px 0 0">${esc(b.texto)}</p>${b.alineas?`<p class="small muted" style="margin:4px 0 0;white-space:pre-line">${esc(b.alineas)}</p>`:''}<p class="small" style="margin:6px 0 0"><b>Recomendação:</b> ${esc(b.rec)}</p><p class="small muted" style="margin:6px 0 0">Usado em: ${u.length?esc(u.join(', ')):'—'}</p></div><button class="btn sm" data-act="bibEd" data-t="${esc(b.tema)}">Editar</button></div></div>`}).join('')).join('')||'<p class="muted">Nenhum tema encontrado.</p>';
+ $('bibList').innerHTML=cab+eixos.map(e=>`<h2 style="font-size:17px;margin:22px 0 10px">${esc(e)}</h2>`+L.filter(b=>b.eixo===e).map(b=>{const u=usadoEm(b.tema);return `<div class="it"><div class="hd"><span class="tag">${esc(b.tema)}</span><div class="sp"><h3>${esc(b.nome)}</h3><div class="small muted">Critério: ${esc(b.criterio)}</div><p class="small" style="margin:8px 0 0">${esc(b.texto)}</p>${b.alineas?`<p class="small muted" style="margin:4px 0 0;white-space:pre-line">${esc(b.alineas)}</p>`:''}<p class="small" style="margin:6px 0 0"><b>Recomendação:</b> ${esc(b.rec)}</p><p class="small muted" style="margin:6px 0 0">Usado em: ${u.length?esc(u.join(', ')):'—'}</p></div><button class="btn sm" data-act="bibEd" data-t="${esc(b.tema)}">Editar</button></div></div>`}).join('')).join('')||'<p class="muted">Nenhum tema encontrado.</p>';
 }
-function editaBib(t){
- const b=t?DADOS.biblioteca.find(x=>x.tema===t):{tema:'',nome:'',eixo:'',criterio:'',texto:'',alineas:'',rec:''};
- dialogo(`<h2 style="margin:0 0 12px;font-size:18px">${t?'Editar tema '+esc(t):'Novo tema'}</h2><div class="grid2"><label class="f">Código<input id="bT" value="${esc(b.tema)}" ${t?'disabled':''} placeholder="ex.: ORC-12"></label><label class="f">Eixo<input id="bE" value="${esc(b.eixo)}" list="eixosL"></label></div><datalist id="eixosL">${[...new Set(DADOS.biblioteca.map(x=>x.eixo))].map(e=>`<option value="${esc(e)}">`).join('')}</datalist>
+function editaBib(t,op){
+ op=op||{};const b=t?DADOS.biblioteca.find(x=>x.tema===t):Object.assign({tema:'',nome:'',eixo:'',criterio:'',texto:'',alineas:'',rec:''},op.pre||{});
+ dialogo(`<h2 style="margin:0 0 12px;font-size:18px">${t?'Editar tema '+esc(t):'Novo tema'}</h2><div class="grid2"><label class="f">Código<input id="bT" value="${esc(b.tema)}" ${t?'disabled':''} placeholder="ex.: ORC-12"></label><label class="f">Eixo<input id="bE" value="${esc(b.eixo)}" list="eixosL"></label></div><datalist id="eixosL">${[...new Set(DADOS.biblioteca.filter(x=>x.tema!==OUT).map(x=>x.eixo))].map(e=>`<option value="${esc(e)}">`).join('')}</datalist>${!t&&op.cb?'<p class="small muted" style="margin:6px 0 0">O tema é criado na Biblioteca e já usado neste achado. Escolha o eixo para sugerir o código.</p>':''}
  <label class="f mt">Nome<input id="bN" value="${esc(b.nome)}"></label><label class="f mt">Critério<input id="bC" value="${esc(b.criterio)}"></label><label class="f mt">Texto-base<textarea id="bX" style="min-height:120px">${esc(b.texto)}</textarea></label><label class="f mt">Alíneas-base (uma por linha)<textarea id="bA">${esc(b.alineas||'')}</textarea></label><label class="f mt">Recomendação<input id="bR" value="${esc(b.rec)}"></label>
- <div class="row mt">${t?'<button class="btn red" id="bDel">Excluir tema</button>':''}<span class="sp"></span><button class="btn" id="bCan">Cancelar</button><button class="btn pri" id="bOk">Salvar</button></div>`);
+ <div class="row mt">${t&&t!==OUT?'<button class="btn red" id="bDel">Excluir tema</button>':''}<span class="sp"></span><button class="btn" id="bCan">Cancelar</button><button class="btn pri" id="bOk">Salvar</button></div>`);
  $('bCan').onclick=fechaDlg;
+ if(!t){const sug=()=>{if(!$('bT').dataset.mexeu)$('bT').value=proxCodigo($('bE').value.trim())};$('bT').oninput=()=>{$('bT').dataset.mexeu=1};$('bE').addEventListener('input',sug);$('bE').addEventListener('change',sug);sug()}
  if($('bDel'))$('bDel').onclick=()=>{DADOS.biblioteca=DADOS.biblioteca.filter(x=>x.tema!==t);fechaDlg();Store.touch();renderBib()};
  $('bOk').onclick=()=>{const tema=(t||$('bT').value).trim().toUpperCase();if(!tema){$('bT').focus();return}if(!t&&DADOS.biblioteca.some(x=>x.tema===tema)){toast('Já existe o tema '+tema);return}
   const n={tema,eixo:$('bE').value.trim()||'Outros',nome:$('bN').value.trim(),criterio:$('bC').value.trim(),texto:$('bX').value.trim(),alineas:$('bA').value.trim(),rec:$('bR').value.trim()};
-  if(t)Object.assign(b,n);else DADOS.biblioteca.push(n);fechaDlg();Store.touch();renderBib()};
+  if(t)Object.assign(b,n);else DADOS.biblioteca.push(n);fechaDlg();Store.touch();renderBib();if(op.cb)op.cb(tema)};
 }
 
 /* ===== Configurações ===== */
@@ -1023,14 +1100,14 @@ const ehPrinc=()=>!window.BASE_RO&&(typeof window.souPrincipal==='function'?wind
 function pintaPerfil(){const ro=!!window.BASE_RO;
  const ta=document.querySelector('.nv-tabs [data-page="analise"]'),tc=document.querySelector('.nv-tabs [data-page="config"]');
  if(ta)ta.hidden=ro;if(tc)tc.hidden=!ehPrinc();
- const at=document.querySelector('main[data-pg]:not([hidden])');if(at&&((ro&&at.dataset.pg==='analise')||(at.dataset.pg==='config'&&!ehPrinc())))irPara('inicio')}
+ const at=document.querySelector('main[data-pg]:not([hidden])');if(at&&((ro&&at.dataset.pg==='analise'&&!(an()&&an().sit==='final'))||(at.dataset.pg==='config'&&!ehPrinc())))irPara('inicio')}
 window.aoMudarAcesso=pintaPerfil;
-(()=>{const ir=irPara;irPara=function(p){if(window.BASE_RO&&p==='analise')p='inicio';if(p==='config'&&!ehPrinc())p='inicio';ir(p);if(p==='config')acTela()}})();
+(()=>{const ir=irPara;irPara=function(p){if(window.BASE_RO&&p==='analise'&&!(an()&&an().sit==='final'))p='inicio';if(p==='config'&&!ehPrinc())p='inicio';ir(p);if(p==='config')acTela()}})();
 
 /* ===== Eventos gerais ===== */
 document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;if(b.tagName==='INPUT'&&b.type!=='checkbox')return;acao(b.dataset.act,b)});
 document.addEventListener('input',e=>{const el=e.target;if(el.id==='bibQ'){renderBib();return}const p=el.dataset&&el.dataset.bind;if(!p)return;const a=an();if(!a)return;setPath(a,p,el.value);if(a.auto&&p in a.auto)a.auto[p]=false;Store.touch();
- if(['numero','ano','sigla','ug','nEdital','modalidade','objeto'].includes(p)){$('anTit').textContent=ptNome(a)}});
+ if(['dataPT','sigla','ug','nEdital','modalidade','objeto'].includes(p)){$('anTit').textContent=ptNome(a)}});
 document.addEventListener('change',e=>{const el=e.target;if(el.dataset&&el.dataset.bind&&el.dataset.rr){const y=scrollY;renderAnalise();scrollTo(0,y)}});
 $('anTabs').onclick=e=>{const b=e.target.closest('[data-sub]');if(!b)return;SUB=b.dataset.sub;renderAnalise()};
 document.addEventListener('change',e=>{if(e.target.id==='pdfIn'){const fs=[...e.target.files];e.target.value='';carregarArquivos(fs)}});
