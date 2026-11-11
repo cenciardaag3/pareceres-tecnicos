@@ -547,8 +547,10 @@ async function carregarArquivos(files){
   }catch(e){toast('Não consegui ler '+f.name+': '+(e.message||e))}
  }
  triagem(a);extrairEdital(a);lerOrcamento(a);
- if(n&&(!a.propostaEm||(!a.achados.length&&!a.conformes.length))){aplicarProposta(a);SUB='parecer';Store.touch();renderAnalise();toast(n+' arquivo(s) lido(s). Parecer proposto: '+a.conformes.length+' conformidade(s) e '+a.achados.length+' achado(s). Revise e confira os pontos indicados.')}
- else{Store.touch();renderAnalise();toast(n+' arquivo(s) lido(s).'+(a.propostaEm?' Para refazer o parecer com a nova leitura, use "Refazer proposta" na etapa 2.':''))}
+ const intocada=!a.propostaEm||(!a.achados.length&&!a.conformes.length)||a.propostaSnap===JSON.stringify([a.conformes,a.achados]);
+ if(n&&intocada){try{aplicarProposta(a);SUB='parecer';Store.touch();renderAnalise();toast(n+' arquivo(s) lido(s). Parecer proposto: '+a.conformes.length+' conformidade(s) e '+a.achados.length+' achado(s). Revise e confira os pontos indicados.')}
+  catch(e){console.error('Proposta',e);Store.touch();renderAnalise();toast('Os arquivos foram lidos, mas a proposta do parecer falhou: '+(e&&e.message||e)+'. Avise o administrador.')}}
+ else{Store.touch();renderAnalise();toast(n+' arquivo(s) lido(s).'+(a.propostaEm?' Você já editou o parecer: para refazê-lo com todos os arquivos, use "Refazer proposta" na etapa 2.':''))}
 }
 function triagem(a){
  const box=MEM.arq[a.id]||{};const T={hits:{},ph:[],x:[]};
@@ -961,7 +963,7 @@ async function acao(act,el){
   case 'autor':{const s=el.dataset.s;a.autores=el.checked?[...a.autores.filter(x=>x!==s),s]:a.autores.filter(x=>x!==s);if(!a.sigla&&a.autores[0])a.sigla=a.autores[0];Store.touch();renderAnalise();break}
   case 'refazProp':{if(!Object.keys(MEM.arq[a.id]||{}).length){toast('Envie de novo os arquivos na etapa 1 (eles não ficam guardados) e a proposta será refeita.');return}
    if((a.conformes.length||a.achados.length)&&!await pergunta('Refazer a proposta a partir dos arquivos lidos? As conformidades e os achados atuais (inclusive o que você editou) serão substituídos.','Refazer'))return;
-   aplicarProposta(a);Store.touch();renderAnalise();toast('Proposta refeita: '+a.conformes.length+' conformidade(s) e '+a.achados.length+' achado(s).');break}
+   try{aplicarProposta(a)}catch(e){console.error('Proposta',e);toast('A proposta falhou: '+(e&&e.message||e));return}Store.touch();renderAnalise();toast('Proposta refeita: '+a.conformes.length+' conformidade(s) e '+a.achados.length+' achado(s).');break}
   case 'sairAn':{await Store.flush();CUR=null;renderAnalise();irPara('inicio');break}
   case 'escolherPdf':$('pdfIn').click();break;
   case 'reExt':{if(!Object.keys(MEM.arq[a.id]||{}).length){toast('Envie de novo os arquivos na etapa 1 para reler (eles não ficam guardados).');return}extrairEdital(a);Store.touch();renderAnalise();toast('Dados relidos dos arquivos.');break}
@@ -1324,7 +1326,7 @@ function extrairAtest(a){const o=a.orc;const box=MEM.arq[a.id]||{};const out=[];
 }
 /* aplica a proposta na análise (substitui conformidades e achados) */
 function aplicarProposta(a){const P=propor(a);
- a.conformes=P.C;a.achados=P.A;a.conferir=P.K;a.propostaEm=new Date().toISOString();a.ordemManual=false;
+ a.conformes=P.C;a.achados=P.A;a.conferir=P.K;a.propostaEm=new Date().toISOString();a.ordemManual=false;a.propostaSnap=JSON.stringify([a.conformes,a.achados]);
  for(const r of ROT){const au=autoRot(a)[r.id];if(au&&au.f)a.rot[r.id]=Object.assign(a.rot[r.id]||{},{st:au.f==='ok'?'conforme':au.f==='err'?'inconforme':(a.rot[r.id]||{}).st})}
  return P}
 
