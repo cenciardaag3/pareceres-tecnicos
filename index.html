@@ -135,6 +135,7 @@ html.ro [data-act=nova],html.ro .ed-only,html.ro [data-act=bibNovo],html.ro [dat
 :root[data-theme="dark"] #roTag{background:#3a2c14;color:#f0c98a;border-color:#6b4f1e}
 .lg-txt{color:var(--mu);font-size:14px;margin:0 0 16px}
 .lg-lk{border:0;background:none;color:var(--g);font-weight:600;margin-top:12px;text-decoration:underline}
+.tabs2 button[hidden]{display:none}.tabs2 #btDet{font-weight:600;color:var(--g);font-size:13px;text-decoration:underline}
 
 #siteNav .brand img.dist-nav{height:40px;width:auto;display:block;flex:none}#siteNav .brand{white-space:normal;font-size:16px;line-height:1.2;max-width:460px}.brand-s{display:none}.lg-dist{width:auto;height:86px;display:block;margin:0 auto 14px}
 @media (max-width:1100px){#siteNav #appNome{display:none}#siteNav .brand-s{display:inline}}
@@ -184,11 +185,12 @@ html.ro [data-act=nova],html.ro .ed-only,html.ro [data-act=bibNovo],html.ro [dat
  <p class="lead" id="anSub">Abra ou crie uma análise na página Início.</p>
  <div id="anBox" hidden>
   <div class="tabs2" id="anTabs">
-   <button data-sub="inicio" aria-current="true">1. Parecer e arquivos</button>
-   <button data-sub="edital">2. Edital</button>
-   <button data-sub="orcamento">3. Orçamento</button>
-   <button data-sub="roteiro">4. Roteiro</button>
-   <button data-sub="parecer">5. Parecer</button>
+   <button data-sub="inicio" aria-current="true">1. Dados e arquivos</button>
+   <button data-sub="parecer">2. Parecer proposto</button>
+   <button data-sub="edital" class="det">Edital</button>
+   <button data-sub="orcamento" class="det">Orçamento</button>
+   <button data-sub="roteiro" class="det">Roteiro</button>
+   <span class="sp"></span><button class="lk small" id="btDet" type="button">Ver análise detalhada</button>
   </div>
   <section data-sec="inicio"></section>
   <section data-sec="edital" hidden></section>
@@ -384,7 +386,9 @@ function renderAnalise(){
  if(!a){$('anTit').textContent='Análise';$('anSit').textContent='';$('anSub').textContent='Abra ou crie uma análise na página Início.';return}
  $('anTit').textContent=ptNome(a);$('anSit').textContent=a.sit==='final'?'Finalizado':'Em andamento';$('anSit').className='tag '+(a.sit==='final'?'ok':'');
  $('anSub').textContent=[a.ug,a.modalidade+' '+a.nEdital,a.objeto].filter(x=>x&&x.trim()).join(' · ')||(window.BASE_RO?'':'Informe os dados do parecer e envie os arquivos do edital.');
- document.querySelectorAll('#anTabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.sub===SUB?'true':'false'));
+ if(!DET&&['edital','orcamento','roteiro'].includes(SUB))DET=true;
+ document.querySelectorAll('#anTabs [data-sub]').forEach(b=>{b.setAttribute('aria-current',b.dataset.sub===SUB?'true':'false');if(b.classList.contains('det'))b.hidden=!DET});
+ $('btDet').textContent=DET?'Ocultar análise detalhada':'Ver análise detalhada';
  document.querySelectorAll('#anBox section').forEach(s=>s.hidden=s.dataset.sec!==SUB);
  const sec=document.querySelector(`#anBox section[data-sec="${SUB}"]`);
  sec.innerHTML=({inicio:secInicio,edital:secEdital,orcamento:secOrc,roteiro:secRoteiro,parecer:secParecer})[SUB](a);
@@ -542,7 +546,9 @@ async function carregarArquivos(files){
    a.arquivos=a.arquivos.filter(x=>x.nome!==f.name);a.arquivos.push(meta);n++;
   }catch(e){toast('Não consegui ler '+f.name+': '+(e.message||e))}
  }
- triagem(a);extrairEdital(a);lerOrcamento(a);Store.touch();renderAnalise();toast(n+' arquivo(s) lido(s). Confira os dados do edital na etapa 2.');
+ triagem(a);extrairEdital(a);lerOrcamento(a);
+ if(n&&(!a.propostaEm||(!a.achados.length&&!a.conformes.length))){aplicarProposta(a);SUB='parecer';Store.touch();renderAnalise();toast(n+' arquivo(s) lido(s). Parecer proposto: '+a.conformes.length+' conformidade(s) e '+a.achados.length+' achado(s). Revise e confira os pontos indicados.')}
+ else{Store.touch();renderAnalise();toast(n+' arquivo(s) lido(s).'+(a.propostaEm?' Para refazer o parecer com a nova leitura, use "Refazer proposta" na etapa 2.':''))}
 }
 function triagem(a){
  const box=MEM.arq[a.id]||{};const T={hits:{},ph:[],x:[]};
@@ -830,13 +836,18 @@ function checklist(a){
 }
 function secParecer(a){
  const C=contexto(a),ck=checklist(a);
+ const conf=(a.conferir||[]);
+ const topo=!a.arquivos.length?'<div class="card mb"><p class="warn" style="margin:0">Envie os arquivos do edital na etapa 1: o parecer é proposto automaticamente depois da leitura.</p></div>':
+  `<div class="card mb"><div class="row" style="flex-wrap:wrap;gap:8px"><h2 style="margin:0;font-size:17px">Parecer proposto${a.propostaEm?` <span class="small muted" style="font-weight:400">em ${esc(dt(a.propostaEm.slice(0,10)))} ${esc(a.propostaEm.slice(11,16))}</span>`:''}</h2><span class="sp"></span><button class="btn sm" data-act="refazProp">Refazer proposta</button></div>
+  <p class="small muted" style="margin:6px 0 0">Montado sem IA, por regras: dados do edital, orçamento (curvas ABC, composições da Faixa A, BDI, ISS, CPRB, administração local), atestados, reajuste, garantia, consórcio, ART/RRT, projetos, texto de modelo e divergências entre documentos. Revise os textos; os trechos entre colchetes precisam ser completados.</p>
+  ${conf.length?`<details class="mt" open><summary><b>Pontos para conferir (${conf.length})</b> <span class="small muted">— dependem de leitura e não entram no parecer</span></summary><ul class="small" style="margin:8px 0 0;padding-left:18px">${conf.map(x=>`<li style="margin-bottom:4px">${esc(x)}</li>`).join('')}</ul></details>`:''}</div>`;
  const ach=a.achados.map((x,i)=>`<div class="it"><div class="row"><b>Achado ${i+1}</b><select class="in" style="width:auto;max-width:420px" data-bind="achados.${i}.tema" data-rr="1">${DADOS.biblioteca.map(b=>`<option value="${esc(b.tema)}"${b.tema===x.tema?' selected':''}>${esc(b.tema)} · ${esc(b.nome.slice(0,50))}</option>`).join('')}</select><select class="in" style="width:auto" data-bind="achados.${i}.grav" data-rr="1">${Object.entries(GRAV).map(([k,t])=>`<option value="${k}"${x.grav===k?' selected':''}>Gravidade ${t}</option>`).join('')}</select><button class="btn sm" data-act="achTemaNovo" data-i="${i}" title="Cria um tema na Biblioteca com o texto, as alíneas e a recomendação deste achado">Criar tema com este achado</button><span class="sp"></span><button class="btn sm" data-act="achUp" data-i="${i}">↑</button><button class="btn sm" data-act="achDn" data-i="${i}">↓</button><button class="btn sm red" data-act="achDel" data-i="${i}">Excluir</button></div>
   <label class="f mt">Texto do parágrafo (condição, critério e efeito)<textarea data-bind="achados.${i}.texto" style="min-height:120px">${esc(x.texto)}</textarea></label>
   <label class="f mt">Alíneas (uma por linha; deixe vazio se não houver)<textarea data-bind="achados.${i}.alineas">${esc(x.alineas||'')}</textarea></label>
   <div class="grid3 mt"><label class="f" style="grid-column:span 2">Recomendação<input data-bind="achados.${i}.rec" value="${esc(x.rec||'')}"></label><label class="f">Efeito estimado (R$)<input data-bind="achados.${i}.valor" value="${esc(x.valor||'')}" inputmode="decimal"></label></div>
   <label class="f mt">Resumo de uma linha (para a recorrência)<input data-bind="achados.${i}.resumo" value="${esc(x.resumo||'')}"></label></div>`).join('');
  const pv=`<div class="pv"><p><b>Parecer Técnico nº ${esc(C.numero||'[nº]')}/DAAG3-${esc(C.sigla||'[SIGLA]')}/${esc(C.ano)}</b> — Brasília, ${esc(C.data_extenso)}.</p><p>Assunto: ${esc(C.assunto)} ${esc(C.publicacao)}.</p><p>1. Preliminarmente, é importante ressaltar que o presente Parecer Técnico (PT) se originou da análise dos documentos referentes ao Edital ${esc(C.edital_artigo)} ${esc(C.referencia_edital)}, constante do Portal Nacional de Contratações Públicas (PNCP) do Governo Federal, devidamente ${esc(C.publicado)} no ${esc(C.publicacao)}.</p><p>2. ${esc(C.objeto)}</p>${C.conformes.map((t,i)=>`<p class="al">${String.fromCharCode(97+i)}) ${esc(t)}</p>`).join('')}${C.achados.map((x,i)=>typeof x==='string'?`<p>${i+3}. ${esc(x)}</p>`:`<p>${i+3}. ${esc(x.texto)}</p>${x.alineas.map((t,j)=>`<p class="al">${String.fromCharCode(97+j)}) ${esc(t)}</p>`).join('')}`).join('')}<p>${C.achados.length+3}. ${esc(C.recomendacoes.length?C.recomendacoes_intro:C.sem_recomendacoes)}</p>${C.recomendacoes.map((t,i)=>`<p class="al">${String.fromCharCode(97+i)}) ${esc(t)}</p>`).join('')}<p>${C.achados.length+4}. E, nada mais havendo para tratar, o presente Parecer, após lido e revisado, segue assinado ${C.autores.length>1?'pelos Auditores':'pelo Auditor'}.</p>${C.autores.map(x=>`<p style="text-align:right;margin:24px 0 0">${esc(x.nome)}<br>Auditor</p>`).join('')}</div>`;
- return `<div class="card mb"><div class="row"><h2 style="margin:0;font-size:17px">Conformidades (alíneas do parágrafo 2)</h2><span class="sp"></span><button class="btn sm" data-act="confNova">Adicionar alínea</button></div>
+ return topo+`<div class="card mb"><div class="row"><h2 style="margin:0;font-size:17px">Conformidades (alíneas do parágrafo 2)</h2><span class="sp"></span><button class="btn sm" data-act="confNova">Adicionar alínea</button></div>
   <p class="small muted">Só fatos e itens que, a priori, estão conformes, sem ressalvas. A pontuação final (";", "; e", ".") é aplicada automaticamente.</p>
   ${a.conformes.map((t,i)=>`<div class="row mb"><span class="tag">${String.fromCharCode(97+i)})</span><textarea class="ta" style="flex:1;min-height:44px" data-bind="conformes.${i}">${esc(t)}</textarea><button class="btn sm" data-act="cfUp" data-i="${i}">↑</button><button class="btn sm red" data-act="cfDel" data-i="${i}">✕</button></div>`).join('')||'<p class="muted small">Nenhuma alínea. Use "+ Conformidade" no Roteiro.</p>'}</div>
  <div class="card mb"><div class="row"><h2 style="margin:0;font-size:17px">Achados</h2><span class="sp"></span><label class="small"><input type="checkbox" data-act="ordemManual"${a.ordemManual?' checked':''}> ordem manual (senão, por gravidade)</label><button class="btn sm" data-act="achNovo">Novo achado</button></div>
@@ -948,6 +959,9 @@ async function acao(act,el){
     if(!await pergunta(`Excluir a análise do ${ptNome(ax)}? Ela não poderá mais ser aberta nem gerar o .docx. O registro na recorrência e em "Pareceres emitidos" é mantido (como importado). Esta ação não pode ser desfeita.`,'Excluir definitivamente'))return}
    else if(!await pergunta('Excluir esta análise em elaboração? Esta ação não pode ser desfeita.','Excluir'))return;DADOS.analises=DADOS.analises.filter(x=>x.id!==el.dataset.id);if(CUR===el.dataset.id)CUR=null;Store.touch();render();break}
   case 'autor':{const s=el.dataset.s;a.autores=el.checked?[...a.autores.filter(x=>x!==s),s]:a.autores.filter(x=>x!==s);if(!a.sigla&&a.autores[0])a.sigla=a.autores[0];Store.touch();renderAnalise();break}
+  case 'refazProp':{if(!Object.keys(MEM.arq[a.id]||{}).length){toast('Envie de novo os arquivos na etapa 1 (eles não ficam guardados) e a proposta será refeita.');return}
+   if((a.conformes.length||a.achados.length)&&!await pergunta('Refazer a proposta a partir dos arquivos lidos? As conformidades e os achados atuais (inclusive o que você editou) serão substituídos.','Refazer'))return;
+   aplicarProposta(a);Store.touch();renderAnalise();toast('Proposta refeita: '+a.conformes.length+' conformidade(s) e '+a.achados.length+' achado(s).');break}
   case 'sairAn':{await Store.flush();CUR=null;renderAnalise();irPara('inicio');break}
   case 'escolherPdf':$('pdfIn').click();break;
   case 'reExt':{if(!Object.keys(MEM.arq[a.id]||{}).length){toast('Envie de novo os arquivos na etapa 1 para reler (eles não ficam guardados).');return}extrairEdital(a);Store.touch();renderAnalise();toast('Dados relidos dos arquivos.');break}
@@ -1109,12 +1123,210 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
 document.addEventListener('input',e=>{const el=e.target;if(el.id==='bibQ'){renderBib();return}const p=el.dataset&&el.dataset.bind;if(!p)return;const a=an();if(!a)return;setPath(a,p,el.value);if(a.auto&&p in a.auto)a.auto[p]=false;Store.touch();
  if(['dataPT','sigla','ug','nEdital','modalidade','objeto'].includes(p)){$('anTit').textContent=ptNome(a)}});
 document.addEventListener('change',e=>{const el=e.target;if(el.dataset&&el.dataset.bind&&el.dataset.rr){const y=scrollY;renderAnalise();scrollTo(0,y)}});
-$('anTabs').onclick=e=>{const b=e.target.closest('[data-sub]');if(!b)return;SUB=b.dataset.sub;renderAnalise()};
+$('anTabs').onclick=e=>{if(e.target.id==='btDet'){DET=!DET;if(!DET&&['edital','orcamento','roteiro'].includes(SUB))SUB='parecer';renderAnalise();return}const b=e.target.closest('[data-sub]');if(!b)return;SUB=b.dataset.sub;renderAnalise()};
+let DET=false;
 document.addEventListener('change',e=>{if(e.target.id==='pdfIn'){const fs=[...e.target.files];e.target.value='';carregarArquivos(fs)}});
 document.addEventListener('dragover',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.add('on')}});
 document.addEventListener('dragleave',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d)d.classList.remove('on')});
 document.addEventListener('drop',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.remove('on');carregarArquivos([...e.dataTransfer.files])}});
 if(window.pdfjsLib&&window.pdfjsWorker===undefined){try{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}catch(e){}}
+
+
+/* ===== Proposta automática de parecer =====
+   Depois da leitura dos arquivos, o app monta sozinho as conformidades (parágrafo 2) e os achados, a partir de regras
+   fixas (sem IA). O que só se resolve lendo e julgando (memorial × orçamento, suficiência do projeto, justificativas)
+   vai para a lista "Pontos para conferir", que não entra no parecer. */
+function docRot(n){const x=norm(n);
+ if(/edital/.test(x))return 'Edital';if(/termo ?de ?refer|termodereferencia/.test(x))return 'TR';if(/minuta|termo ?de ?contrato/.test(x))return 'minuta do contrato';
+ if(/memorial/.test(x))return 'Memorial Descritivo';if(/curva ?abc ?de ?serv/.test(x))return 'Curva ABC de Serviços';if(/curva ?abc ?de ?ins/.test(x))return 'Curva ABC de Insumos';
+ if(/orcamento ?analitic/.test(x))return 'Orçamento Analítico';if(/composic\w* ?analitic|analitic/.test(x))return 'Composições Analíticas';if(/calculo ?iss/.test(x))return 'Cálculo do ISS';
+ if(/bdi/.test(x))return 'BDI';if(/cronograma/.test(x))return 'Cronograma Físico-Financeiro';if(/resumid/.test(x))return 'Orçamento Resumido';if(/planilha/.test(x))return 'Planilha Orçamentária';
+ if(/\brrt\b|rrt/.test(x))return 'RRT';if(/\bart\b/.test(x))return 'ART';return curto(n)}
+const TXT_DOCS=['Edital','TR','minuta do contrato'];
+/* procura um padrão (sobre o texto normalizado) nos documentos indicados; devolve trechos do texto original */
+function achar(a,re,tipos,max){const box=MEM.arq[a.id]||{},out=[];const g=new RegExp(re.source,re.flags.includes('g')?re.flags:re.flags+'g');
+ for(const [nome,pags] of Object.entries(box)){const d=docRot(nome);if(tipos&&!tipos.includes(d))continue;
+  pags.forEach((t,i)=>{const tn=norm(t);g.lastIndex=0;let m;while((m=g.exec(tn))){out.push({doc:d,arq:nome,p:i+1,m,i:m.index,t,tr:t.slice(Math.max(0,m.index-160),m.index+m[0].length+220).replace(/\s+/g,' ')});if(max&&out.length>=max)return;if(m[0]==='')g.lastIndex++}})
+  if(max&&out.length>=max)break}
+ return out}
+const ref=x=>x?`${x.doc}, p. ${x.p}`:'';
+const bco=b=>/pr[oó]pri/i.test(b||'')?'própria':String(b||'').replace(/^SICRO\d/,'SICRO');
+const lista=L=>L.length<=1?L.join(''):L.slice(0,-1).join(', ')+' e '+L[L.length-1];
+const item=x=>{if(!x)return null;if(typeof x==='string'){const m=x.match(/(?:^|\s)(\d{1,2}(?:\.\d{1,3}){1,4})\.?\s/);return m?m[1]:null}
+ const pre=x.t.slice(Math.max(0,x.i-2000),x.i+5);let u=null;for(const m of pre.matchAll(/(?:^|\n|\.\s|;\s|:\s)\s*(\d{1,2}(?:\.\d{1,3}){1,4})\.?\s/g))u=m[1];return u};
+/* "TR, p. 10 e 11; Edital, p. 3" */
+const refs=L=>{const g=new Map();for(const x of L){if(!g.has(x.doc))g.set(x.doc,new Set());g.get(x.doc).add(x.p)}return [...g].map(([d,ps])=>`${d}, p. ${lista([...ps].sort((a,b)=>a-b).map(String))}`).join('; ')};
+const artigo=d=>d==='TR'?'o TR':/^(minuta|Curva|Planilha)/.test(d)?'a '+d:/^Composições/.test(d)?'as '+d:'o '+d;
+
+function propor(a){
+ const R=calcOrc(a),o=a.orc,T=R.T,au=autoRot(a),box=MEM.arq[a.id]||{};
+ const nomes=Object.keys(box),rots=nomes.map(docRot);
+ const C=[],A=[],K=[];  // conformidades, achados, pontos para conferir
+ const ach=(tema,grav,texto,x={})=>{const b=DADOS.biblioteca.find(y=>y.tema===tema)||{};A.push(Object.assign({id:uid(),tema,alineas:'',rec:b.rec||'',valor:'',resumo:''},x,{grav:grav||x.grav||'M',texto:texto||x.texto||b.texto||''}))};
+ const valorOK=Number.isFinite(num(a.valor));
+ const mod=String(a.modalidade||'').toLowerCase(),reg=String(a.regime||'').toLowerCase();
+ const ehObra=/obra|constru|reforma|recupera|ampliac|amplia|demoli|edifica|pavimenta/.test(norm(a.objeto));
+
+ /* 1. Valor estimado */
+ if(valorOK&&distintos((a.ext&&a.ext.valor)||[]).length<=1){const ds=[...new Set((a.ext&&a.ext.valor||[]).filter(x=>num(x.v)===num(a.valor)).map(x=>docRot(x.arq)))].filter(d=>['Edital','TR','minuta do contrato','Orçamento Resumido','Planilha Orçamentária'].includes(d));
+  const dz=ds.map(d=>d==='TR'?'o Termo de Referência (TR)':artigo(d));
+  C.push(`o valor estimado da contratação é R$ ${fmt(num(a.valor))}${dz.length?', de acordo com '+lista(dz):''};`)}
+ /* 2. Objeto, modalidade e critério */
+ if(mod){const grupo=achar(a,/\bgrupo\s+(\d+|i{1,3}|unico)\b|\blote\s+\d+/,['Edital','TR'],3).filter(x=>!/unico/.test(x.m[0]));
+  C.push(`trata-se de ${ehObra?'obra':'serviço de engenharia'}, licitad${ehObra?'a':'o'} ${grupo.length?'por grupo':'em item único'}, na modalidade ${mod}${a.criterio?`, com critério de julgamento de ${a.criterio}`:''};`)}
+ /* 3. Regime */
+ if(reg)C.push(`o regime de execução é o de ${reg};`);
+ /* 4. Local de execução */
+ {const L=achar(a,/\b(av\.|avenida|rua|rodovia|estrada|praca|alameda)\s[^;\n]{3,90}?\d{1,5}/,['TR','Memorial Descritivo','Edital'],1)[0];
+  if(L){const t0=L.t.slice(L.i).replace(/\s*\n\s*/g,' ');const s=t0.split(/;|\.\s+(?=[A-ZÀ-Ú\d])|\)/)[0].slice(0,150).replace(/[,.\s]+$/,'').trim();C.push(`foi definido o local de execução dos serviços (${s});`)}
+  else K.push('Local de execução: não localizei endereço no TR, no Edital nem no Memorial. Confira e, se for o caso, inclua achado INF-00.')}
+ /* 5. Vistoria */
+ {const fac=achar(a,/vistoria[^.]{0,250}?(facultativ|nao (sera )?obrigatori|opcional|substitui)/,TXT_DOCS,1)[0],obr=achar(a,/vistoria[^.]{0,120}?obrigatori/,TXT_DOCS,3).filter(x=>!/nao (sera |e )?obrigatori|facultativ/.test(x.m[0]))[0];
+  if(fac&&!obr)C.push('a vistoria é facultativa, admitida a sua substituição por declaração do responsável técnico;');
+  else if(obr)K.push(`Vistoria possivelmente obrigatória (${ref(obr)}): confira se há justificativa e se é admitida declaração substitutiva (Lei 14.133, art. 63, §§ 2º e 3º).`)}
+ /* 6. Fontes e datas-base */
+ if(o.bancos.length){const bs=o.bancos.map(b=>{const [n,d]=b.split(' – ');return `${n.replace(/^SICRO\d/,'SICRO')} ${d||''}`.trim()});const uf=(o.bancos[0].split(' – ')[2]||'').trim();
+  const todasUF=o.bancos.every(b=>(b.split(' – ')[2]||'').trim()===uf);
+  C.push(`foram informadas as fontes e as datas-base das estimativas de preços da Administração (${lista(bs)}${uf?(todasUF?`, todas d${/^(rio|espirito|parana|amazonas|amapa|acre|para|maranhao|tocantins|mato|piaui|rio grande|ceara)/.test(norm(uf))?'o':'e'} ${uf}`:''):''});`.replace(/, todas d[oe] ([^)]+)\)/,(m,u)=>`, todas d${/^(rio|espirito|parana|amazonas|amapa|acre|para|maranhao|tocantins|mato|piaui|ceara|distrito)/.test(norm(u))?'o':/^(bahia|paraiba)/.test(norm(u))?'a':'e'} ${u})`))}
+ /* 7. Peças do orçamento */
+ {const tem=[o.serv.length&&'as Curvas ABC de Serviços',o.ins.length&&'de Insumos'].filter(Boolean);const pecas=[];
+  if(rots.some(r=>/Planilha|Resumido|Analítico/.test(r))||o.totGeral)pecas.push('o orçamento sintético');
+  if((o.comps||[]).length||rots.includes('Composições Analíticas')||rots.includes('Orçamento Analítico'))pecas.push('as composições analíticas');
+  if(o.serv.length&&o.ins.length)pecas.push('as Curvas ABC de Serviços e de Insumos');else if(o.serv.length)pecas.push('a Curva ABC de Serviços');
+  if(rots.includes('Cronograma Físico-Financeiro'))pecas.push('o cronograma físico-financeiro');
+  if(pecas.length>=3)C.push(`foram publicados ${lista(pecas)};`);
+  if(!(o.comps||[]).length&&!rots.some(r=>/Analíti/.test(r)))ach('ORC-04','M',null,{resumo:'Composições analíticas não localizadas'});
+  if(!rots.includes('Cronograma Físico-Financeiro'))K.push('Cronograma físico-financeiro não localizado entre os arquivos: confira.');}
+ /* 8. BDI e ISS */
+ const bd=R.bO;let issOk=true;
+ if(R.issRef!=null&&o.bdiO&&o.bdiO.ISS&&nz(o.bdiO.ISS)>R.issRef+.1){issOk=false;const doc=achar(a,/calculo do iss|composicao do bdi/,null,1)[0];
+  ach('BDI-02','M',`No que diz respeito à taxa de BDI empregada na composição dos preços de referência, a alíquota de ISS considerada foi de ${pct(nz(o.bdiO.ISS))}${doc?` (${ref(doc)})`:''}, enquanto a supressão da parcela de materiais da alíquota do município resultaria em ${pct(R.issRef)}, conforme preconiza o Inciso I do § 2º do Art. 7º da Lei Complementar nº 116/2003, o que pode implicar em sobrepreço.`,{resumo:`ISS ${pct(nz(o.bdiO.ISS))} × ${pct(R.issRef)} esperado`})}
+ if(bd!=null){if(bd>=T.BDI[0]-.01&&bd<=T.BDI[2]+.01&&issOk)C.push(`o BDI de ${pct(bd)} está dentro dos limites recomendados no estudo estatístico de custos indiretos para obras (Acórdão 2.622/2013-TCU-Plenário), teve a sua composição publicada e considerou a exclusão da parcela de materiais na base de cálculo do ISS;`);
+  else if(bd>T.BDI[2]+.01)K.push(`BDI de ${pct(bd)} acima do 3º quartil (${pct(T.BDI[2])}) para ${T.nome.toLowerCase()}: confira o tipo de obra (etapa Edital) e a justificativa; se for o caso, registre achado.`)}
+ else if(o.bdiCab==null||!Object.keys(o.bdiO||{}).length)ach('BDI-03','M',null,{resumo:'Composição do BDI não publicada'});
+ /* 9. CPRB e onerado × desonerado */
+ {const t=textoAuto(a,'BDI-01');if(t)ach('BDI-01',t.grav,t.texto.replace('[documento, p. X]',ref(achar(a,/\bcprb\b/,['BDI'],1)[0])||'BDI'),t)}
+ if(!(o.des&&o.des.onerado&&o.des.desonerado))extrairDes(a);
+ {const d=o.des||{};
+  if(d.onerado&&d.desonerado){const melhor=R.desMelhor||(nz(d.onerado)<=nz(d.desonerado)?'onerado':'desonerado');
+   if(d.adotado&&d.adotado!==melhor){const t=textoAuto(a,'DES-01');if(t)ach('DES-01',t.grav,t.texto,t)}
+   else if(d.adotado)C.push(`foi apresentado o comparativo entre os orçamentos com e sem desoneração, tendo sido adotado o ${d.adotado==='onerado'?'não desonerado':'desonerado'};`)}
+  else ach('DES-01','M',null,{resumo:'Comparativo onerado × desonerado não localizado'})}
+ /* 10. Garantia e subcontratação */
+ {const g=achar(a,/garantia (de execucao|contratual|da contratacao)[^.]{0,220}?(\d{1,2}(?:,\d+)?)\s?(%|por cento)/,TXT_DOCS,1)[0];
+  const permite=achar(a,/(e permitida|sera admitida|e admitida|fica permitida) a subcontratacao|poderao ser subcontratad/,TXT_DOCS,1).length;
+  const vedSub=!permite&&achar(a,/(nao sera admitida|e vedada|fica vedada|nao e permitida|nao sera permitida) a subcontratacao(?! (completa|de pessoa|da parcela|parcial))/,TXT_DOCS,1)[0];
+  const sub=!vedSub&&achar(a,/subcontrata/,TXT_DOCS,1)[0];
+  const gs=g?`foi prevista garantia contratual de ${g.m[2]}% do valor do contrato`:'';
+  if(gs||sub)C.push((gs?gs:'')+(gs&&sub?', e as regras de subcontratação foram definidas':sub?'as regras de subcontratação foram definidas':'')+';');
+  if(vedSub)ach('COM-02','M',`${artigo(vedSub.doc).replace(/^./,c=>c.toUpperCase())} estabeleceu que a subcontratação não será admitida (${item(vedSub)?'item '+item(vedSub)+', ':''}p. ${vedSub.p}), sem motivação. Além de aumentar o risco de restrição à competitividade, a vedação pode prejudicar a execução quando houver serviços muito específicos.`,{resumo:'Subcontratação vedada sem motivação'})}
+ /* 11. ART/RRT */
+ {const art=nomes.filter(n=>{const x=norm(n);return /rrt|(^|[^a-z])art(?=[^a-z]|$|orc|proj|exec|obra)|anotacao ?de ?resp|registro ?de ?resp/.test(x)});
+  const artTxt=achar(a,/registro de responsabilidade tecnica|anotacao de responsabilidade tecnica/,null,5).filter(x=>x.p<=2&&!TXT_DOCS.includes(x.doc));
+  const lista2=[...new Set([...art.map(docRot),...artTxt.map(x=>x.doc)])];
+  if(lista2.length)C.push(`foram apresentadas as ART/RRT relativas ao projeto e/ou ao orçamento (${lista(lista2)});`),K.push('ART/RRT: confira se cobrem o orçamento e o projeto e se os responsáveis coincidem com os indicados nas planilhas.');
+  else ach('DOC-01','M',null,{resumo:'ART/RRT não localizadas'})}
+ /* 12. Projetos */
+ {const prj=nomes.filter(n=>/\bdes\s?\d|desenho|prancha|planta|projeto|\.dwg/.test(norm(n).replace(/[-_]/g,' '))).map(curto);
+  if(prj.length)C.push(`foram disponibilizados os projetos (${lista(prj.slice(0,6))}${prj.length>6?' e outros':''});`);
+  else ach('PRJ-01','M','Não foram localizados, entre os arquivos disponibilizados, os projetos que caracterizam o objeto com o nível de precisão exigido do projeto básico pelo inciso XXV do Art. 6º da Lei nº 14.133/2021.',{resumo:'Projetos não publicados'});
+  K.push('Memorial e projeto: confira se caracterizam o objeto (espessuras, materiais, métodos) e se os quantitativos do orçamento batem com eles. Se não, use PRJ-01 e ORC-10.')}
+ /* 13. Administração Local */
+ {const t=textoAuto(a,'ORC-03');if(t){const r0=o.serv[(o.alSel||[])[0]];ach('ORC-03',t.grav,t.texto.replace('[documento, p. X]',r0?`${docRot(r0.arq)}, p. ${r0.pag}`:'Curva ABC de Serviços'),Object.assign({},t,{resumo:`AL ${pct(R.alPct)} do CD (3º quartil ${pct(T.AL[2])})`}))}
+  else if(R.al)K.push(`Administração Local de ${pct(R.alPct)} do custo direto (dentro do 3º quartil): confira no cronograma se a medição é proporcional à execução.`);
+  else K.push('Administração Local não identificada na Curva ABC: confira se está orçada e como será medida.')}
+ /* 14. Atestados */
+ if(!(o.atest||[]).length)extrairAtest(a);
+ {const R2=calcOrc(a);const t=R2.atest.some(x=>x.p>50)?textoAuto(a,'HAB-01'):null;
+  if(t){const L=R2.atest.filter(x=>x.p>50);const its=[...new Set(L.map(x=>x.ref).filter(Boolean))];const ps=[...new Set(L.map(x=>x.p_doc).filter(Boolean))];
+   const tot=[...new Set(L.map(x=>`${fmt(nz(x.total),2)} ${x.und||''}`.trim()))];const pc=[...new Set(L.map(x=>pct(x.p,1)))];
+   const txt=`Quanto à qualificação técnico-operacional, ${its.length?`${its.length>1?'os itens':'o item'} ${lista(its)} do TR${ps.length?` (p. ${lista(ps.map(String))})`:''}`:'o TR'} ${L.length>1?'exigem':'exige'} atestados de ${lista(L.map(x=>`${x.parcela} (${fmt(nz(x.exig),2)} ${x.und||''})`.replace(' )',')')))}, o que corresponde a ${lista(pc)} do quantitativo a ser executado (${lista(tot)}), acima do limite de 50% estabelecido no § 2º do Art. 67 da Lei nº 14.133/2021.`;
+   ach('HAB-01','A',txt,{resumo:`Atestados acima de 50% (${pc.join(', ')})`})}
+  else if(R2.atest.length)C.push('foram definidos os critérios para a qualificação técnico-operacional, com quantitativos mínimos dentro do limite de 50% das parcelas de maior relevância;');
+  if(R2.atest.length)K.push(`Atestados: o total de cada parcela foi estimado pela quantidade do serviço mais parecido no orçamento (${R2.atest.map(x=>`${x.parcela}: ${fmt(nz(x.exig),2)} de ${fmt(nz(x.total),2)} ${x.und||''}`).join('; ')}). Confira na etapa Orçamento.`)}
+ /* 15. Serviços com a mesma quantidade (sobreposição) */
+ const RAD=s=>norm(s).replace(/[^a-z ]/g,' ').split(/\s+/).filter(w=>w.length>4&&!/^(sinapi|proprio|servico|execucao|fornecimento|instalacao|inclusive|conforme|unidade|metro|metros|encargos|complementares|livro|calculos|parametros)$/.test(w)).map(w=>w.slice(0,5));
+ const limpa=r=>r.desc.replace(BANCOS,' ').replace(/\b\d{2}\.\d{3}\.\d{4}-?\d?|\b\d{4,}\b/g,' ').replace(/^[\s\d.\-–]+/,'').replace(/\b\d{2}\.\d{3}\.\d{3,4}(-\d)?\b|\s-\s|\b\d{1,3}(?=\s|$)/g,' ').replace(/\s+,/g,',').replace(/\s+/g,' ').trim().slice(0,90).toLowerCase();
+  const nucleo=r=>RAD(r.desc.replace(BANCOS,' ').replace(/\b[\d.\-]+\b/g,' ')).filter(w=>!/^(sicro|emop|orse|pisos|aplic|execu|forne|insta|manua|demao|inclu|prepa|lanca|trans|carga|super|mater|equip|servi|mecan|unida|espes|conce|concr|pavim|argam|rigid|final|obras)$/.test(w)).slice(0,3);
+ const pares=[];for(const L0 of R.dup){const L=L0.filter(r=>!(o.alSel||[]).includes(o.serv.indexOf(r)));
+  for(let x=0;x<L.length;x++)for(let y=x+1;y<L.length;y++){const w0=new Set(nucleo(L[x]));if(nucleo(L[y]).some(w=>w0.has(w)))pares.push([L[x],L[y]])}}
+ for(const s of pares.slice(0,3)){const L=s;const tot=L.reduce((x,r)=>x+r.tot,0);
+  ach('ORC-11','M',`Foram orçados, para a mesma quantidade (${fmt(s[0].q,2)} ${String(s[0].und).toLowerCase()}), os serviços ${s.map(r=>`${r.banco&&r.banco!=='?'?r.banco.replace(/^SICRO\d/,'SICRO')+' ':''}${r.cod||(r.desc.match(/\b\d{2}\.\d{3}\.\d{4}-?\d?/)||[''])[0]} – ${limpa(r)} (R$ ${fmt(r.pu)}/${String(r.und).toLowerCase()})`).join(' e ')} (${docRot(s[0].arq)}, p. ${s[0].pag}), o que pode indicar sobreposição de serviços. Os itens somam R$ ${fmt(tot)} sem BDI.`,{resumo:'Possível sobreposição: '+s.map(r=>limpa(r).slice(0,30)).join(' × '),rec:`Revisem a previsão simultânea de ${s.map(r=>limpa(r).split(',')[0]).join(' e de ')} para a mesma quantidade, adotando o definido no projeto`})}
+ /* 16. Composições da Faixa A */
+ {const coef=[],moi=[],fora=[],prop=[];const CD=R.CD||o.totSemBDI||0;
+  for(const c of o.comps||[]){const r=o.serv[c.i]||{};const {A:al}=alertasComp(a,c);const loc=`${docRot(c.arq)}, p. ${c.pag}`;const peso=CD?100*nz(r.tot)/CD:null;
+   for(const [nv,t] of al){if(nv==='err'&&/Coeficiente alto/.test(t))coef.push({c,r,t,loc});else if(nv==='err'&&/indireta/.test(t))moi.push({c,r,t,loc});else if(/fora do SINAPI da UF/.test(t))fora.push({c,r,t,loc});else if(/Composição (própria|do )/.test(t)&&peso!=null&&(/pr[oó]pri/i.test(c.banco)?peso>=3:peso>=10))prop.push({c,r,peso,loc});else if(nv==='warn'&&!/Composição (própria|do )/.test(t))K.push(`Composição ${c.banco} ${c.cod} (${loc}): ${t}`)}}
+  for(const x of coef.slice(0,4)){const m=x.t.match(/^([\d.,]+) h de (.+?) por (\S+): ([\d.,]+) h no total \(([\d.,]+)/);
+   ach('ORC-02','M',m?`A composição ${bco(x.c.banco)} ${x.c.cod} (${x.c.desc.slice(0,80).toLowerCase()}), da Faixa A da Curva ABC de Serviços, prevê ${m[1]} h de ${m[2]} por ${m[3]} (${x.loc}), o que resulta em cerca de ${m[4]} horas para ${m[5]} ${m[3]}. O coeficiente deve ser comparado com o de composições do SINAPI para o mesmo serviço.`:`Na composição ${x.c.banco} ${x.c.cod} (${x.loc}): ${x.t}`,{resumo:`Coeficiente de mão de obra alto (${x.c.banco} ${x.c.cod})`,rec:`Revisem o coeficiente de mão de obra da composição ${bco(x.c.banco)} ${x.c.cod}, adotando composições do SINAPI`})}
+  for(const x of moi.slice(0,3))ach('ORC-02','M',`A composição ${bco(x.c.banco)} ${x.c.cod} (${x.loc}) inclui mão de obra indireta – ${(x.t.match(/\((.+?)\)/)||[])[1]||''} –, o que pode duplicar custos já previstos na Administração Local.${(x.t.match(/Efeito: (R\$ [\d.,]+)/)||[])[1]?` O efeito estimado é de ${(x.t.match(/Efeito: (R\$ [\d.,]+)/)||[])[1]} sem BDI.`:''}`,{resumo:`Mão de obra indireta em ${x.c.banco} ${x.c.cod}`,rec:`Retirem a mão de obra indireta da composição ${bco(x.c.banco)} ${x.c.cod}, mantendo-a apenas na Administração Local`});
+  if(fora.length){const bs=[...new Set(fora.map(x=>(x.t.match(/Mão de obra de (.+?) \(/)||[])[1]).filter(Boolean))];ach('ORC-08','M',`Insumos de mão de obra ${fora.length>1?'das composições':'da composição'} ${lista(fora.slice(0,4).map(x=>`${bco(x.c.banco)} ${x.c.cod} (${x.loc})`))} foram obtidos de ${lista(bs)}, e não do SINAPI da UF da obra, o que desconsidera os salários e encargos da praça, contrariando o art. 5º, parágrafo único, do Decreto nº 7.983/2013.`,{resumo:'Mão de obra fora do SINAPI'})}
+  prop.sort((x,y)=>y.peso-x.peso);const prop2=prop.filter((x,k)=>k===0||x.peso>=10);
+  for(const x of prop2.slice(0,3))ach('ORC-01','M',`A composição ${/pr[oó]pri/i.test(x.c.banco)?'própria':'do '+x.c.banco} ${x.c.cod} (${x.c.desc.slice(0,80).toLowerCase()}), item da Faixa A da Curva ABC de Serviços (${pct(x.peso)} do custo direto; ${x.loc}), não foi acompanhada de justificativa para a não utilização do SINAPI nem de relatório técnico que demonstre a pertinência das adaptações, conforme o § 2º do Art. 23 da Lei nº 14.133/2021 e os Arts. 6º e 8º do Decreto nº 7.983/2013.`,{resumo:`Composição ${x.c.banco} ${x.c.cod} sem justificativa`,rec:`Justifiquem a não utilização do SINAPI na composição ${bco(x.c.banco)} ${x.c.cod} ou substituam-na por composição do SINAPI`});
+  if(o.serv.length&&!(o.comps||[]).length&&rots.some(r=>/Analíti/.test(r)))K.push('Composições analíticas: não consegui localizar as da Faixa A no arquivo enviado (formato diferente). Confira manualmente.')}
+ /* 17. Regime: metas de resultado e sub/superestimativas */
+ if(/global|integral|integrada/.test(reg)){
+  if(!achar(a,/eventograma|metas de resultado|marcos? de pagamento|etapas do cronograma/,TXT_DOCS,1).length)ach('REG-01','M',`Em relação ao regime de execução escolhido – ${a.regime} – não foram localizadas as metas de resultado (eventos/eventograma) a serem utilizadas como referência para o pagamento dos serviços, em atendimento ao § 9º do Art. 46 da Lei nº 14.133/2021.`,{resumo:'Metas de resultado não definidas'});
+  if(!achar(a,/subestimativ|superestimativ/,TXT_DOCS,1).length)ach('REG-02','B',null,{resumo:'Sub/superestimativas não definidas'});
+  const est=achar(a,/(meramente estimativ|quantitativos efetivamente (fornecidos|executados|medidos))/,['minuta do contrato','TR'],1)[0];
+  if(est){const z=est.t.slice(Math.max(0,est.i-90),est.i+160).replace(/\s+/g,' ');K.push(`Medição × regime: "…${z.slice(z.indexOf(' ')+1,z.lastIndexOf(' '))}…" (${ref(est)}). Em preço global, o pagamento deve seguir etapas/eventos, não quantidades medidas.`)}}
+ /* 18. Reajuste */
+ {const rj=achar(a,/reajust/,TXT_DOCS);const idx=new Map();
+  for(const x of rj){const w=norm(x.t.slice(x.i,x.i+500));for(const [k,re] of [['IPCA-E',/ipca-e\b/],['IPCA',/\bipca\b(?!-e)/],['INCC',/\bincc/],['IGP-M',/igp-?m/],['SINAPI',/indice[^.]{0,40}sinapi/],['IST',/\bist\b/]])if(re.test(w)&&!idx.has(k))idx.set(k,x)}
+  if(!rj.length)ach('REJ-01','M',null,{resumo:'Cláusula de reajuste ausente'});
+  else if(idx.size>1){const ks=[...idx.keys()];const g=new Map();for(const k of ks){const x=idx.get(k);const key=x.doc+'|'+(item(x)||'')+'|'+x.p;if(!g.has(key))g.set(key,{x,ks:[]});g.get(key).ks.push(k)}
+   const partes=[...g.values()].map(({x,ks},j)=>`${item(x)?'o item '+item(x)+' ':''}${x.doc==='TR'?'do TR':x.doc==='Edital'?'do Edital':'da minuta'} (p. ${x.p}) ${j===0?'adota':'prevê'} o ${ks.join(' ou o ')}`);
+   ach('REJ-04','M',`Os documentos apresentam critérios de reajuste conflitantes: ${partes.length>1?partes.slice(0,-1).join(', ')+', enquanto '+partes[partes.length-1]:partes[0]}. A indefinição do índice contraria o § 3º do Art. 92 da Lei nº 14.133/2021, que exige a definição prévia do índice no contrato.`.replace(/conflitantes: o item/,'conflitantes: o item'),{resumo:'Índices de reajuste conflitantes ('+ks.join(', ')+')'})}
+  else if(idx.size===1)C.push(`foram definidos os critérios de reajuste (${[...idx.keys()][0]});`)}
+ /* 19. Consórcio */
+ {let v=achar(a,/(vedada|nao sera admitida|nao sera permitida|nao poderao participar)[^.]{0,80}?consorcio|consorcio[^.]{0,40}?(vedad|nao sera admitid)/,['Edital','TR'],1)[0];
+  if(!v)v=achar(a,/reunidas em consorcio/,['Edital','TR']).find(x=>/nao poderao (disputar|participar)/.test(norm(x.t.slice(Math.max(0,x.i-3500),x.i))));
+  if(v&&!achar(a,/consorcio[^.]{0,300}?justific|justific[^.]{0,300}?consorcio/,['Edital','TR'],1).length){const tr2=achar(a,/consorcio de empresas|habilitacao[^.]{0,80}consorcio/,['TR'],1)[0];
+   ach('COM-04','M',`${artigo(v.doc).replace(/^./,c=>c.toUpperCase())} veda a participação de consórcios (${item(v)?'item '+item(v)+', ':''}p. ${v.p}) sem a justificativa exigida pelo caput do Art. 15 da Lei nº 14.133/2021${tr2&&v.doc!=='TR'?`, enquanto o TR relaciona documentos de habilitação de consórcio (${item(tr2)?'item '+item(tr2)+', ':''}p. ${tr2.p})`:''}.`,{resumo:'Consórcio vedado sem justificativa'})}}
+ /* 20. Texto de modelo não preenchido */
+ {const ph=(a.triagem&&a.triagem.ph||[]).filter(x=>TXT_DOCS.includes(docRot(x.arq)));
+  if(ph.length){const por={};for(const x of ph){const d=docRot(x.arq);(por[d]||(por[d]=new Set())).add(x.p)}
+   const mz=ph.some(x=>/matriz|risco/i.test(x.t));
+   ach('DOC-04','M',`${lista(Object.entries(por).map(([d,ps])=>`${d==='TR'?'o TR':d==='Edital'?'o Edital':'a minuta do contrato'} (p. ${[...ps].slice(0,8).join(', ')})`)).replace(/^o/,'O').replace(/^a /,'A ')} ${Object.keys(por).length>1?'mantêm':'mantém'} trechos do modelo sem preenchimento ou com alternativas não resolvidas${mz?', inclusive na matriz de riscos':''}, o que gera insegurança jurídica quanto às regras aplicáveis à contratação.`,{resumo:`Texto de modelo não preenchido (${ph.length} trecho(s))`});
+   K.push('Texto de modelo: a lista completa está na etapa 1 (Dados e arquivos). Confira se algum trecho é relevante (vigência, reajuste, matriz de riscos, pagamento) e cite-o no achado DOC-04.')}}
+ /* 21. Inconsistências entre documentos */
+ {const al=[];
+  if(a.ext)for(const [k,nome] of [['pag','número do processo administrativo'],['valor','valor estimado'],['nEdital','número do edital'],['uasg','UASG']]){const L=a.ext[k]||[];const vs=distintos(L);if(vs.length>1)al.push(`o ${nome} diverge entre os documentos: ${vs.map(v=>{const ds=[...new Set(L.filter(x=>chaveV(x.v)===chaveV(v)).map(x=>`${docRot(x.arq)}, p. ${x.p}`))].slice(0,3);return `${k==='valor'?'R$ ':''}${v} (${ds.join('; ')})`}).join(', ')};`)}
+  const l8=achar(a,/lei (federal )?n?[o.º°]*\s*8\.666/,TXT_DOCS,6);if(l8.length){const ds=[...new Set(l8.map(x=>x.doc))];al.push(`${lista(ds.map(artigo))} cita${ds.length>1?'m':''} a Lei nº 8.666/1993 (${refs(l8)}), revogada;`)}
+  const ded=achar(a,/dedicacao exclusiva de mao de obra/,TXT_DOCS,2);if(ded.length&&ehObra)al.push(`há referência a "dedicação exclusiva de mão de obra" (${refs(ded)}), o que não se aplica a obra por empreitada;`);
+  if(al.length)ach('DOC-05','M','Foram identificadas, ainda, inconsistências entre os documentos do certame:',{alineas:al.join('\n'),resumo:'Inconsistências entre documentos'})}
+ K.push('Justificativas do TJTR (opções marcadas "( X )", lista na etapa 1) e exigências restritivas (índices contábeis, experiência em locais específicos): confira.');
+ return {C,A,K};
+}
+/* comparativo onerado × desonerado (tabela "vantajosidade" da planilha) */
+function extrairDes(a){const o=a.orc;o.des=o.des||{};
+ for(const pags of Object.values(MEM.arq[a.id]||{}))for(const t of pags){const n=norm(t);if(!/desonerad/.test(n)||!/(total|valor)[^\n]{0,40}(obra|global|geral)?[^\n]{0,20}(\+ ?bdi|com bdi)/.test(n))continue;
+  const m=t.match(/TOTAL[^\n]{0,40}BDI[^\n]*?R\$\s*([\d.]+,\d{2})\s+R\$\s*([\d.]+,\d{2})/i);if(!m)continue;
+  const bd=t.match(/(?:^|\n)\s*BDI\s+([\d.]+,\d+)\s?%\s+([\d.]+,\d+)\s?%/i);let desPrim;
+  if(bd)desPrim=pn(bd[1])>pn(bd[2]);else{const k=n.search(/tabela|valores/);const z=n.slice(Math.max(0,k));const iD=z.search(/desonerada \(d\)|com desonera/),iN=z.search(/nao desonerada|\(nd\)|sem desonera/);desPrim=iD>=0&&(iN<0||iD<iN)}o.des.desonerado=desPrim?m[1]:m[2];o.des.onerado=desPrim?m[2]:m[1];
+  const sb=t.match(/(OBRA SEM BDI|SEM BDI)[^\n]*?R\$\s*([\d.]+,\d{2})\s+R\$\s*([\d.]+,\d{2})/i);if(sb)o.des.desSemBDI=desPrim?sb[2]:sb[3];break}
+ if(!o.des.adotado&&o.regCab)o.des.adotado=/nao/.test(norm(o.regCab))?'onerado':'desonerado';
+}
+/* atestados: quantitativos mínimos das parcelas de maior relevância × quantidade orçada do serviço mais parecido */
+function extrairAtest(a){const o=a.orc;const box=MEM.arq[a.id]||{};const out=[];
+ const PAL=s=>norm(s).replace(/[^a-z ]/g,' ').split(/\s+/).filter(w=>w.length>3&&!/^(execucao|servico|servicos|area|minima|minimo|quantidade|aplicacao|atestado|atestados|obra|obras|unica|meio|somatorio|alta|base|tipo)$/.test(w));
+ for(const [nome,pags] of Object.entries(box)){if(docRot(nome)!=='TR')continue;
+  const ini=pags.findIndex(t=>/parcelas? de maior relevancia/.test(norm(t)));if(ini<0)continue;
+  const txt=pags.slice(ini,ini+2).join('\n');const k0=norm(txt).search(/parcelas? de maior relevancia/);const sub=txt.slice(k0,k0+2500);
+  for(const m of sub.matchAll(/(?:^|\n)\s*(\d{1,2}(?:\.\d{1,3}){1,4})\.?\s+((?:(?!\n\s*\d{1,2}\.\d)[\s\S]){5,260}?)(?:com |em )?(?:área\s+|quantidade\s+|extensão\s+|volume\s+)?m[íi]nim[ao]\s+de\s+([\d.]+(?:,\d+)?)\s*(m²|m2|m³|m3|m|kg|t|un|unidades?)/gi)){
+   const und=m[4].replace('2','²').replace('3','³');const exig=pn(m[3]);const ws=PAL(m[2]);
+   const nu=x=>norm(x).replace(/²/g,'2').replace(/³/g,'3');const cand=[];for(const r of o.serv){if(nu(r.und)!==nu(und))continue;const rw=new Set(PAL(r.desc));const s=ws.filter(w=>rw.has(w)).length;if(s>0)cand.push({r,s})}
+   /* quantidade mais repetida entre os serviços parecidos (costuma ser a área/extensão da obra); empate: maior pontuação */
+   const fq=new Map();for(const c of cand)fq.set(c.r.q,(fq.get(c.r.q)||0)+1);cand.sort((x,y)=>(fq.get(y.r.q)-fq.get(x.r.q))||(y.s-x.s));const best=cand[0]&&cand[0].r,sc=cand.length?1:0;
+   let pIdx=ini+1;for(let q=ini;q<Math.min(pags.length,ini+3);q++)if(pags[q].includes(m[1]+'.')||pags[q].includes(m[1]+' ')){pIdx=q+1;if(q>ini||pags[q].indexOf(m[1])>pags[q].search(/maior relev/i))break}
+   out.push({parcela:m[2].replace(/\s+/g,' ').replace(/\s*\(.*$/,'').replace(/[,;:\s]+$/,'').slice(0,90).replace(/^./,c=>c.toLowerCase()),exig:fmt(exig,2),total:best&&sc>0?fmt(best.q,2):'',und,ref:m[1],p_doc:pIdx})}
+  if(out.length)break}
+ if(out.length)o.atest=out.filter(x=>x.total);
+}
+/* aplica a proposta na análise (substitui conformidades e achados) */
+function aplicarProposta(a){const P=propor(a);
+ a.conformes=P.C;a.achados=P.A;a.conferir=P.K;a.propostaEm=new Date().toISOString();a.ordemManual=false;
+ for(const r of ROT){const au=autoRot(a)[r.id];if(au&&au.f)a.rot[r.id]=Object.assign(a.rot[r.id]||{},{st:au.f==='ok'?'conforme':au.f==='err'?'inconforme':(a.rot[r.id]||{}).st})}
+ return P}
 
 
 /* ===== Navegação (a aba aberta volta ao recarregar) ===== */
